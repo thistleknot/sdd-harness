@@ -30,30 +30,46 @@ SDD harness solves this by making the spec the source of truth and enforcing tha
 git clone https://github.com/thistleknot/sdd-harness ~/.harness
 ```
 
-### 2. Install the skill-router (semantic retrieval)
+### 2. Run setup
 
 ```bash
-cd ~/.harness/retrieve-skills
-pip install -r requirements.txt
-python indexer.py  # embeds skill descriptions (first run downloads MiniLM-L6)
+python ~/.harness/setup.py
 ```
 
-Start the retrieval server (persistent, one process for all sessions):
+This single command:
+- Copies core skills to `~/.skills` (the shared skill store all harnesses read from)
+- Installs retrieve-skills dependencies and indexes the store
+- Detects which harnesses you have (Claude Code, opencode, Kiro, pi)
+- Syncs MCP server registrations to all detected harnesses
+- Asks if you want to wire the optional todo and memory-index MCP servers
+
+**Flags:**
+```bash
+python setup.py --all            # non-interactive, install everything
+python setup.py --skip-optional  # core only (retrieve-skills), no todo/memory-index
+python setup.py --target claude  # sync to one harness only
+```
+
+### 3. Start the retrieve-skills server
+
+The server must be running for skill retrieval to work (one process for all sessions):
+
 ```bash
 # Linux/macOS
-nohup python server.py &
+cd ~/.claude/skills/retrieve-skills && nohup python server.py &
 
 # Windows (register as service via NSSM, or Start-Process)
-Start-Process -FilePath python -ArgumentList server.py -WindowStyle Hidden
+Start-Process -FilePath python -ArgumentList "C:/Users/user/.claude/skills/retrieve-skills/server.py" -WindowStyle Hidden
 ```
 
-### 3. Wire your harness
+### 4. (Optional) Start memory-index server
+
+If you wired memory-index during setup:
 
 ```bash
-python ~/.harness/adapter.py --target all
+# Windows
+Start-Process -FilePath python -ArgumentList "C:/Users/user/.skills/memory-index/mem_server.py" -WindowStyle Hidden
 ```
-
-This syncs `harness.json` → Claude Code (`.claude.json`), opencode (`opencode.json`), and Kiro (`~/.kiro/settings/mcp.json`).
 
 ### 4. Import the constitution into your CLAUDE.md
 
@@ -179,13 +195,15 @@ All three harnesses implemented Conway's Game of Life in 3D from the same `spec.
 ```
 ~/.harness/
 ├── README.md              # This file
+├── setup.py               # One-command installer for all harnesses
 ├── requirements.md        # 13 EARS requirements
 ├── design.md              # Architecture + data flow
 ├── tasks.md               # 11 implementation tasks
 ├── constitution.md        # 9 immutable articles + Phase -1 Gates
 ├── inspirations.md        # Competitive analysis + 11 reference repos
 ├── harness.json           # Shared config (MCP servers + model routing)
-├── adapter.py             # Syncs harness.json → all harness configs
+├── manifest.toml          # Capability matrix (artifact × harness strategies)
+├── adapter.py             # Syncs harness.json → all harness configs (MCP only)
 ├── hooks/
 │   ├── security_scan.py   # PreToolUse: blocks credentials
 │   ├── codebase_map.py    # UserPromptSubmit: project structure injection
@@ -205,6 +223,15 @@ All three harnesses implemented Conway's Game of Life in 3D from the same `spec.
 │   ├── sweep.py           # CV hyperparameter tuning
 │   └── hook.py            # UserPromptSubmit hook (calls /route)
 └── references/            # 11 cloned repos for inspiration
+
+~/.skills/                 # SHARED SKILL STORE (all harnesses read from here)
+├── retrieve-skills/       # SKILL.md for the retrieval gate itself
+├── todo/                  # todo_mcp.py + SKILL.md
+├── memory-index/          # mem_server.py + SKILL.md-equivalent
+├── spec/                  # SDD workflow skill
+├── debugging/             # Root-first isolation protocol
+├── ...                    # 160+ more skills
+└── README.md              # Instructions for adding skills
 ```
 
 ## Inspirations
@@ -335,6 +362,67 @@ Kiro's Spec mode gives you a structured requirements → design → tasks workfl
 6. **Agent ladder** — escalation chain (critic → fixer_low → fixer_med → planner) for self-correction
 
 Kiro's Spec mode is the closest native equivalent to what this harness provides — but scoped to a single IDE without the retrieval, memory, or enforcement layers.
+
+### Where do I put new skills?
+
+All skills live in `~/.skills/`. This is the single shared store that all harnesses read from via the retrieve-skills MCP server.
+
+To add a skill:
+
+1. Create a folder: `~/.skills/my-skill/`
+2. Add a `SKILL.md` with YAML frontmatter:
+   ```yaml
+   ---
+   name: my-skill
+   description: >
+     What this skill does and when to use it. This description is the
+     retrieval unit — write it to match the prompts that should trigger it.
+   ---
+   
+   # Instructions here
+   ```
+3. Reindex: `curl -X POST http://127.0.0.1:8765/reindex`
+
+The `description` field is what gets embedded and matched against your prompts. If it doesn't match the language you'd use to describe the task, the skill won't surface. Write descriptions in terms of *what the user would ask for*, not internal terminology.
+
+Skills are NOT loaded into context by default — they're only injected when the retrieval gate decides they're relevant (ColBERT reranker, margin gate at 1.5). This prevents context bloat.
+
+### What does the todo MCP server do?
+
+Persistent task tracking across sessions. When the agent identifies follow-up work that won't be done immediately, it logs a todo. Next session, it calls `list_todos` at startup to surface pending work.
+
+- Stored in SQLite (per-project `.todo/todos.db` or global `~/todos.db`)
+- Runs as stdio (started fresh per session by the harness — no persistent process needed)
+- Tools: `add_todo`, `list_todos`, `complete_todo`, `update_todo`, `remove_todo`
+
+### What does the memory-index MCP server do?
+
+Semantic memory that persists across sessions. The agent can:
+- `search_memory("query")` — recall prior decisions, patterns, or lessons
+- `log_memory("what I learned")` — jot ephemeral bits (cheap, anneals away if unused)
+- `add_memory(name, type, desc, body)` — write durable entries
+
+The annealing lifecycle: logged bits that get recalled ≥3 times auto-promote to durable markdown in `~/memory-bank/`. Unused bits decay over time. Useful patterns rise; noise disappears.
+
+Requires:
+- Ollama running with `nomic-embed-text` pulled (`ollama pull nomic-embed-text`)
+- The memory-index server running on port 8055
+
+### What's the "core product" — what's the minimum viable install?
+
+The minimum that gives you the full SDD experience:
+
+1. **`~/.skills/`** — the shared skill store with at least the core skills
+2. **retrieve-skills server** (:8765) — semantic skill injection per prompt
+3. **Steering/instructions** — the constitution + operating rules in your harness's native format
+
+That's it. Todo and memory-index are force multipliers but not required for the core spec-driven workflow to function.
+
+The full stack adds:
+- **todo MCP** — cross-session task continuity
+- **memory-index MCP** — semantic recall of prior decisions/patterns
+- **spec_gate hook** — machine-enforced spec compliance (Claude Code only)
+- **Agent ladder** — self-correcting escalation chain
 
 ## License
 

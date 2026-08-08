@@ -413,19 +413,36 @@ If they're down, skills and memory won't inject, but the spec gate and CLAUDE.md
 
 ### How do I use this in Kiro?
 
-Kiro has explicit workflow modes you select at session start:
+Kiro uses explicit session types you select when starting a session. Click the session type dropdown at the top of the chat panel:
 
-| Kiro Mode | SDD Equivalent |
-|-----------|----------------|
-| **Default** | Routing gate → "Do" (trivial, unambiguous tasks) |
-| **Spec** | Routing gate → "Spec" (full requirements → design → tasks) |
-| **Quick Spec** | Compressed spec flow (skip user review loop) |
-| **Bug Fix** | Root-first isolation (Article VI) |
-| **Plan** | Read-only planning mode (no file mutations) |
+**Starting a session:**
+1. Open Kiro
+2. Click the session type selector (top of chat panel — shows "Vibe" by default)
+3. Pick the mode that matches your task:
 
-**Key difference from Claude Code:** Kiro has no `spec_gate.py` enforcement — it cannot deny tool calls (`can_gate = false` in manifest). You are the enforcement. Pick **Spec** mode for any non-trivial feature work. For small fixes, **Bug Fix** or **Default** is fine.
+| Kiro Mode | When to pick it | SDD Equivalent |
+|-----------|----------------|----------------|
+| **Vibe** (Default) | Quick questions, trivial edits, conversation | Routing gate → "Answer" or "Do" |
+| **Spec** | Any non-trivial feature — this is your SDD mode | Routing gate → "Spec" (requirements → design → tasks → implement) |
+| **Quick Spec** | Medium features where you trust the agent to spec without review | Compressed spec (auto-generates req + design + tasks, then builds) |
+| **Bug Fix** | Something is broken, you need root-cause isolation | Root-first isolation (Article VI) |
+| **Plan** | You want to think through an approach without writing code | Read-only planning (no file mutations) |
 
-The steering files in `~/.kiro/steering/` provide the same instructions (they're LINKed from this repo — zero drift), and the MCP servers (retrieve-skills, memory-index) work identically. Kiro is actually the best-served harness for skill retrieval since it's a native MCP client.
+**For SDD work, always pick Spec.** That mode walks through:
+1. Clarify requirements (with `[NEEDS CLARIFICATION]` markers if ambiguous)
+2. Generate a design document
+3. Break into numbered tasks with dependencies
+4. Implement task-by-task with your approval at each step
+
+**Autonomy modes** (separate from session type):
+- **Autopilot** (default): Kiro works through tasks end-to-end. You review after.
+- **Supervised**: Kiro yields after each file edit for your accept/reject per hunk.
+
+Pick Supervised + Spec for maximum control. Pick Autopilot + Spec when you trust the spec and want speed.
+
+**Key difference from Claude Code:** Kiro has no `spec_gate.py` enforcement — it cannot deny tool calls (`can_gate = false` in manifest). The Spec mode provides *workflow structure* but not *machine enforcement*. If you pick Vibe mode and ask it to write code without a spec, it will. The discipline is on you to pick the right mode.
+
+The steering files in `~/.kiro/steering/` provide the same operating instructions (they're LINKed from this repo — zero drift), and the MCP servers (retrieve-skills, memory-index) work identically. Kiro is actually the best-served harness for skill retrieval since it's a native MCP client.
 
 ### How do I use this in opencode?
 

@@ -411,38 +411,75 @@ The `spec_gate.py` hook **denies file writes** until a spec exists and reaches t
 
 If they're down, skills and memory won't inject, but the spec gate and CLAUDE.md instructions still work (they're local hooks/files).
 
-### How do I use this in Kiro?
+### How does this harness replicate Kiro's modes?
 
-Kiro uses explicit session types you select when starting a session. Click the session type dropdown at the top of the chat panel:
+Kiro has 5 built-in workflow modes. This harness replicates each one across Claude Code, opencode, and pi using hooks, skills, and steering — here's how to trigger the equivalent behavior in each harness:
 
-**Starting a session:**
-1. Open Kiro
-2. Click the session type selector (top of chat panel — shows "Vibe" by default)
-3. Pick the mode that matches your task:
+**Spec mode** (requirements → design → tasks → implement):
+```bash
+# Claude Code — spec gate auto-enforces; just describe the feature
+claude -p "I need a new user auth system with OAuth2. Let's spec this."
+# → Agent enters planning, produces requirements.md, design.md, tasks.md
+# → spec_gate.py BLOCKS any file writes until spec reaches 'implement' phase
 
-| Kiro Mode | When to pick it | SDD Equivalent |
-|-----------|----------------|----------------|
-| **Vibe** (Default) | Quick questions, trivial edits, conversation | Routing gate → "Answer" or "Do" |
-| **Spec** | Any non-trivial feature — this is your SDD mode | Routing gate → "Spec" (requirements → design → tasks → implement) |
-| **Quick Spec** | Medium features where you trust the agent to spec without review | Compressed spec (auto-generates req + design + tasks, then builds) |
-| **Bug Fix** | Something is broken, you need root-cause isolation | Root-first isolation (Article VI) |
-| **Plan** | You want to think through an approach without writing code | Read-only planning (no file mutations) |
+# opencode — same prompt, plugin gate enforces
+opencode run "I need a new user auth system with OAuth2. Let's spec this."
+# → AGENTS.md routing gate triggers Spec mode, plugin blocks premature writes
 
-**For SDD work, always pick Spec.** That mode walks through:
-1. Clarify requirements (with `[NEEDS CLARIFICATION]` markers if ambiguous)
-2. Generate a design document
-3. Break into numbered tasks with dependencies
-4. Implement task-by-task with your approval at each step
+# pi — same prompt, extension gate enforces
+pi -p "I need a new user auth system with OAuth2. Let's spec this."
+# → Extension-based gate fires, same workflow
+```
 
-**Autonomy modes** (separate from session type):
-- **Autopilot** (default): Kiro works through tasks end-to-end. You review after.
-- **Supervised**: Kiro yields after each file edit for your accept/reject per hunk.
+**Quick Spec mode** (compressed — agent specs + builds without pausing for review):
+```bash
+# All harnesses — signal you trust it to spec and go
+claude -p "Build a REST endpoint for /api/health that returns {status: ok, uptime: N}. Spec it and implement — no review needed."
+opencode run "Build a REST endpoint for /api/health that returns {status: ok, uptime: N}. Spec it and implement — no review needed."
+pi -p "Build a REST endpoint for /api/health that returns {status: ok, uptime: N}. Spec it and implement — no review needed."
+# → Agent produces spec + immediately implements (gate sees approved spec)
+```
 
-Pick Supervised + Spec for maximum control. Pick Autopilot + Spec when you trust the spec and want speed.
+**Bug Fix mode** (root-first isolation — Article VI):
+```bash
+# The 'debugging' skill auto-injects when the prompt sounds like a bug
+claude -p "The /users endpoint returns 500 on pagination. Isolate the root cause."
+opencode run "The /users endpoint returns 500 on pagination. Isolate the root cause."
+pi -p "The /users endpoint returns 500 on pagination. Isolate the root cause."
+# → retrieve-skills injects 'debugging' skill (root-first isolation protocol)
+# → Agent walks backward to earliest broken link, no spec ceremony needed
+```
 
-**Key difference from Claude Code:** Kiro has no `spec_gate.py` enforcement — it cannot deny tool calls (`can_gate = false` in manifest). The Spec mode provides *workflow structure* but not *machine enforcement*. If you pick Vibe mode and ask it to write code without a spec, it will. The discipline is on you to pick the right mode.
+**Plan mode** (read-only — think through approach, no file mutations):
+```bash
+# Signal planning intent explicitly
+claude -p "Plan only, don't write any files: how should we restructure the auth module to support SSO?"
+opencode run "Plan only, don't write any files: how should we restructure the auth module to support SSO?"
+pi -p "Plan only, don't write any files: how should we restructure the auth module to support SSO?"
+# → Routing gate picks 'Answer' mode (no file mutations)
+# → Agent analyzes, proposes architecture, produces no code
+```
 
-The steering files in `~/.kiro/steering/` provide the same operating instructions (they're LINKed from this repo — zero drift), and the MCP servers (retrieve-skills, memory-index) work identically. Kiro is actually the best-served harness for skill retrieval since it's a native MCP client.
+**Default/Vibe mode** (trivial tasks — just do it):
+```bash
+# Mechanical edits, renames, formatting — gate exempts these
+claude -p "Rename getUserName to getUsername everywhere in src/"
+opencode run "Rename getUserName to getUsername everywhere in src/"
+pi -p "Rename getUserName to getUsername everywhere in src/"
+# → Routing gate picks 'Do' (unambiguous, no spec needed)
+# → spec_gate exempts mechanical edits with one-line justification
+```
+
+**How the harness decides which mode to use:**
+
+The routing gate in AGENTS.md/CLAUDE.md evaluates every prompt:
+- Touches observable behavior, control flow, persistence, or public interfaces → **Spec**
+- Bug report / error / "why is this broken" → **Bug Fix** (debugging skill injects)
+- "Plan" / "think through" / "how should we" → **Plan** (no writes)
+- Trivial rename / typo / formatting → **Do** (immediate action)
+- Question / explanation request → **Answer** (respond, no tools)
+
+In Claude Code, `spec_gate.py` is the backstop — even if the routing gate gets it wrong, the hook blocks writes without an approved spec. In opencode/pi, the plugin/extension gate does the same. The routing gate is the first line; the hook is the enforcement.
 
 ### How do I use this in opencode?
 
@@ -482,14 +519,6 @@ pi inherits most of its SDD configuration from Claude Code's user-scope settings
 pi -p "Read spec.md. This spec is already approved — implement it as index.html."
 ```
 
-### Why can't Kiro enforce the spec gate?
-
-Kiro has no PreToolUse interception point. It cannot inspect a tool call before execution and return a "deny" decision. The manifest records this as `can_gate = false, gate_style = "none"`.
-
-This means Kiro receives the same instructions and skills as Claude Code, but compliance is advisory — the LLM follows the constitution because it's told to, not because a hook blocks it when it doesn't.
-
-For critical spec-governed work, use Claude Code (machine-enforced) or treat Kiro's **Spec** mode as your manual enforcement layer.
-
 ### What if the HTTP services aren't running?
 
 The system degrades gracefully:
@@ -499,19 +528,6 @@ The system degrades gracefully:
 | retrieve-skills (:8765) | No automatic skill injection. Agent works from CLAUDE.md + memory only. | Start it: `Start-Process python server.py` in the retrieve-skills dir |
 | memory-index (:8055) | No semantic recall of prior decisions/patterns. | Start it: `Start-Process python server.py` in the memory-index dir |
 | Both down | Core SDD still works — spec gate, constitution, CLAUDE.md, and agents are all local files/hooks. Just no dynamic context enrichment. | Run `verify.ps1` to diagnose |
-
-### How is this different from just using Kiro's built-in Spec mode?
-
-Kiro's Spec mode gives you a structured requirements → design → tasks workflow inside the IDE. This harness extends that pattern with:
-
-1. **Machine enforcement** (Claude Code only) — you can't skip the spec even if you try
-2. **Semantic skill retrieval** — 166+ skills auto-injected per prompt based on relevance
-3. **Annealing memory** — decisions persist across sessions, promote on reuse, decay when unused
-4. **Cross-harness portability** — same workflow in Claude Code, opencode, pi, and Kiro
-5. **Constitutional framework** — 9 articles + Phase -1 gates that prevent over-engineering
-6. **Agent ladder** — escalation chain (critic → fixer_low → fixer_med → planner) for self-correction
-
-Kiro's Spec mode is the closest native equivalent to what this harness provides — but scoped to a single IDE without the retrieval, memory, or enforcement layers.
 
 ### Where do I put new skills?
 

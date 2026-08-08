@@ -64,27 +64,51 @@ HARNESSES = {
 }
 
 # Core skills that ship with this harness (relative to HARNESS_ROOT or discoverable)
-# These are the skills that make the SDD framework function
+# These are the skills that make the harness function as a Python-centric agentic dev environment
 CORE_SKILLS = [
+    # --- Infrastructure (MCP servers + retrieval) ---
     "retrieve-skills",  # the retrieval SKILL.md (not the server itself)
     "todo",
     "memory-index",
+    "memory-bank",
+    # --- Spec lifecycle ---
     "spec",
     "spec-init",
     "spec-new",
     "spec-next",
     "spec-approve",
     "spec-status",
+    # --- Debugging & isolation ---
     "debugging",
-    "memory-bank",
-    "lessons-learned",
-    "consolidation",
-    "tdd-agent",
-    "security-review",
+    "subtractive-debugging",
+    "evidence-first-exploration",
+    "diagnostic-scanner",
+    "pipeline-input-review",
+    # --- Code quality & patterns ---
     "code",
     "architecture",
-    "git-workflow",
+    "design-patterns",
+    "simplify",
+    "security-review",
     "validation",
+    "tdd-agent",
+    "llm-pipeline-layer-tdd",
+    "checklist",
+    # --- Reasoning & research ---
+    "reasoning",
+    "hypothesis-forge",
+    "agentic-orchestration",
+    # --- Workflow & continuity ---
+    "git-workflow",
+    "lessons-learned",
+    "consolidation",
+    "failed-feature-iteration",
+    "context-compaction",
+    # --- Robustness & observability ---
+    "build-observability",
+    "timeout-guard",
+    "ewma-eta-watchdog",
+    "prompt-optimization",
 ]
 
 

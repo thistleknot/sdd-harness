@@ -1,18 +1,21 @@
 # SDD Harness
 
-A cross-harness Spec-Driven Development system that works identically across Claude Code, opencode, pi, and Kiro. One spec, three+ harnesses. The workflow is the same everywhere — only the model tier adapts.
+A cross-harness agentic development environment for Python-centric work — spec-driven development, debugging, reasoning, and code quality — that works identically across Claude Code, opencode, and pi. One skill store, one spec workflow, one memory system. The model tier adapts; the behavioral contract doesn't.
 
-Built on the same principles as [Kiro](https://kiro.dev)'s structured requirements → design → tasks workflow, extended with machine-enforced gates, semantic skill retrieval, annealing memory, and a constitutional framework that constrains LLM output quality.
+Inspired by [Kiro](https://kiro.dev)'s structured requirements → design → tasks workflow, but not limited to spec replication. This harness provides machine-enforced gates, semantic skill retrieval (35+ core skills), annealing memory, a constitutional framework, and disciplines for debugging, reasoning, testing, and orchestration that go beyond what any single IDE offers natively.
 
 ## What This Is
 
 A drop-in developer harness that gives your AI coding agent:
 
 - **Spec-first enforcement** — a PreToolUse hook that blocks file mutations until a spec is approved
-- **Semantic skill retrieval** — ColBERT-reranked auto-injection of relevant skills per prompt (166+ skills indexed)
+- **Semantic skill retrieval** — ColBERT-reranked auto-injection of relevant skills per prompt (35+ core skills, 166+ total indexed)
 - **Constitutional gates** — 9 immutable articles + Phase -1 checklists that prevent over-engineering, premature abstraction, and speculative code
 - **Annealing memory** — bits you work out get logged; recalled ≥3 times they promote to durable markdown; unused bits decay
-- **Cross-harness adapter** — one config (`harness.json`) syncs MCP servers and model routing to Claude Code, opencode, and Kiro simultaneously
+- **Cross-harness adapter** — one config (`harness.json`) syncs MCP servers and model routing to Claude Code, opencode, and pi simultaneously
+- **Debugging protocols** — root-first isolation, subtractive regression, evidence-first exploration, diagnostic scanning
+- **Reasoning disciplines** — Six Hats, TRIZ, OODA, hypothesis-forge for structured ideation-to-validation
+- **Pipeline TDD** — gate-based testing for layered LLM/ETL pipelines, with watchdogs and timeout guards
 - **Security scanning** — blocks credential exposure before it hits disk
 - **Convergence checking** — verifies implementation matches spec, reports gaps
 
@@ -228,8 +231,15 @@ All three harnesses implemented Conway's Game of Life in 3D from the same `spec.
 ├── retrieve-skills/       # SKILL.md for the retrieval gate itself
 ├── todo/                  # todo_mcp.py + SKILL.md
 ├── memory-index/          # mem_server.py + SKILL.md-equivalent
-├── spec/                  # SDD workflow skill
+├── spec/                  # SDD workflow skill (EARS, 4 layers, rendered artifacts)
 ├── debugging/             # Root-first isolation protocol
+├── subtractive-debugging/ # Systematic regression isolation
+├── reasoning/             # Six Hats, TRIZ, OODA orientation
+├── hypothesis-forge/      # Structured ideation → evidence → test design
+├── code/                  # Stack defaults (fastapi/pydantic/polars/sqlite)
+├── design-patterns/       # GoF + contracts (Require/Guarantee/Maintain/Assert)
+├── llm-pipeline-layer-tdd/ # Gate-based TDD for layered pipelines
+├── agentic-orchestration/ # Multi-agent pattern taxonomy
 ├── ...                    # 160+ more skills
 └── README.md              # Instructions for adding skills
 ```

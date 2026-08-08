@@ -296,6 +296,44 @@ Kiro has explicit workflow modes you select at session start:
 
 The steering files in `~/.kiro/steering/` provide the same instructions (they're LINKed from this repo — zero drift), and the MCP servers (retrieve-skills, memory-index) work identically. Kiro is actually the best-served harness for skill retrieval since it's a native MCP client.
 
+### How do I use this in opencode?
+
+opencode receives the SDD framework through three channels:
+
+1. **AGENTS.md** — the full operating contract (same content as Claude Code's, GENERATE'd into opencode's native format)
+2. **MCP servers** — retrieve-skills and memory-index wire as `streamable-http` entries in `opencode.json`
+3. **Plugin gate** — `spec-gate.ts` enforces spec-first via opencode's plugin system (throws to abort tool calls)
+
+**In practice:** open a session and work normally. The routing gate (Answer/Do/Spec) is in AGENTS.md, so the model follows it. The plugin gate blocks writes without an approved spec, same as Claude Code's hook — just different machinery.
+
+**Limitation:** opencode's `tool.execute.before` hook cannot intercept subagent calls (opencode#5894). The adapter maps task/agent delegation to a DELEGATE pattern that works around this — subagents are not gated, so keep spec-critical work in the main session.
+
+**Model tier:** opencode routes to OpenRouter (deepseek-v4-flash at $0.14/M for orchestrator/coder/critic, or local ollama models). Same SDD workflow, cheaper compute.
+
+```bash
+# Invoke headlessly for conformance testing
+opencode run "list all MCP servers"
+```
+
+### How do I use this in pi?
+
+pi inherits most of its SDD configuration from Claude Code's user-scope settings, plus:
+
+1. **Extensions** — `~/.pi/agent/extensions/spec-gate/` provides the gate (returns `{block: true, reason}` to deny writes)
+2. **Skills** — `~/.pi/skills/` is a symlink to `~/.skills`, so it reads the same store
+3. **Skill router** — pi has no native MCP client, so `retrieve-skills/` is an extension that POSTs to the HTTP `/route` endpoint directly
+
+**In practice:** same as Claude Code — open a session, the framework self-activates. The spec gate fires on writes, skills inject per-prompt via the extension, memory and todos work through inherited Claude Code MCP registrations.
+
+**Key strength:** pi has the most complete gate today — it can intercept shell commands AND delegation calls, which Claude Code and opencode both miss in some form.
+
+**Model tier:** routes through litellm to local ollama (same models as opencode) or OpenRouter.
+
+```bash
+# Invoke headlessly for conformance testing
+pi -p "list all MCP servers"
+```
+
 ### How do I port updates across all 3 harnesses?
 
 There are two mechanisms depending on what changed:

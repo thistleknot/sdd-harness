@@ -229,6 +229,113 @@ Built on patterns from:
 | Constitutional framework | ✓ (9 articles) | ✗ | ✗ | ✓ (9 articles + Phase -1) |
 | CV-tuned retrieval | ✗ | ✗ | ✗ | ✓ (sweep.py, top_k=34, rerank_keep=21) |
 
+## FAQ
+
+### How do I use this in a new Claude Code session?
+
+You don't do anything special — just open a session and talk to it.
+
+The framework self-activates through hooks:
+1. `SessionStart` → memory loads
+2. `UserPromptSubmit` → skill retrieval fires, codebase map injects
+3. `CLAUDE.md` + `@AGENTS.md` → always-on operating contract (routing gate, agent ladder, memory protocol)
+
+The **routing gate** decides automatically: if your task touches observable behavior, control flow, persistence, or public interfaces → it enters Spec mode. If it's trivial → it just does it. If it's a question → it answers.
+
+The `spec_gate.py` hook **denies file writes** until a spec exists and reaches the `implement` phase. You don't have to remember — the machine enforces it.
+
+**One prerequisite:** the HTTP services must be running:
+```powershell
+# Verify both are alive
+(Invoke-WebRequest "http://127.0.0.1:8765/health" -UseBasicParsing).Content  # retrieve-skills
+(Invoke-WebRequest "http://127.0.0.1:8055/health" -UseBasicParsing).Content  # memory-index
+```
+
+If they're down, skills and memory won't inject, but the spec gate and CLAUDE.md instructions still work (they're local hooks/files).
+
+### How do I use this in Kiro?
+
+Kiro has explicit workflow modes you select at session start:
+
+| Kiro Mode | SDD Equivalent |
+|-----------|----------------|
+| **Default** | Routing gate → "Do" (trivial, unambiguous tasks) |
+| **Spec** | Routing gate → "Spec" (full requirements → design → tasks) |
+| **Quick Spec** | Compressed spec flow (skip user review loop) |
+| **Bug Fix** | Root-first isolation (Article VI) |
+| **Plan** | Read-only planning mode (no file mutations) |
+
+**Key difference from Claude Code:** Kiro has no `spec_gate.py` enforcement — it cannot deny tool calls (`can_gate = false` in manifest). You are the enforcement. Pick **Spec** mode for any non-trivial feature work. For small fixes, **Bug Fix** or **Default** is fine.
+
+The steering files in `~/.kiro/steering/` provide the same instructions (they're LINKed from this repo — zero drift), and the MCP servers (retrieve-skills, memory-index) work identically. Kiro is actually the best-served harness for skill retrieval since it's a native MCP client.
+
+### How do I port updates across all 3 harnesses?
+
+There are two mechanisms depending on what changed:
+
+**MCP server changes** (adding/removing/reconfiguring a server):
+```powershell
+# Edit the single source of truth
+notepad ~/.harness/harness.json
+
+# Sync to all harnesses in one command
+python ~/.harness/adapter.py --target all
+```
+
+This handles the polarity inversion automatically (opencode uses `enabled: true`, Kiro uses `disabled: false`).
+
+**Everything else** depends on the strategy in `manifest.toml`:
+
+| Strategy | What happens | Your action |
+|----------|-------------|-------------|
+| **LINK** | Directory junction — both sides see the same bytes | Nothing. Edit once, propagates instantly. |
+| **GENERATE** | Formats differ — must emit native form from canonical source | Re-run the generator (or `install.py` once built) |
+| **SKIP** | Capability absent in that harness | Nothing to port. |
+
+Current LINK cells (zero-effort sync):
+- `policy/` → Claude + pi + opencode (all share the same gate logic)
+- `steering/` → Kiro (native frontmatter = our interlingua)
+- `agents/` → Claude (markdown + YAML frontmatter matches)
+- `skills/` → Claude + pi (same SKILL.md format)
+
+Current GENERATE cells (need regeneration on change):
+- Instructions → Claude (`CLAUDE.md`), opencode (plugin), pi (extension)
+- Adapter/gate → Claude (`settings.json` hooks entry), opencode (`spec-gate.ts`)
+- MCP → all three (handled by `adapter.py`)
+
+**The gap:** A full `install.py` that reads manifest.toml and dispatches all GENERATE cells doesn't exist yet. Until then: `adapter.py` for MCP, junctions for LINK cells, and manual regeneration for instructions/adapter GENERATE cells.
+
+### Why can't Kiro enforce the spec gate?
+
+Kiro has no PreToolUse interception point. It cannot inspect a tool call before execution and return a "deny" decision. The manifest records this as `can_gate = false, gate_style = "none"`.
+
+This means Kiro receives the same instructions and skills as Claude Code, but compliance is advisory — the LLM follows the constitution because it's told to, not because a hook blocks it when it doesn't.
+
+For critical spec-governed work, use Claude Code (machine-enforced) or treat Kiro's **Spec** mode as your manual enforcement layer.
+
+### What if the HTTP services aren't running?
+
+The system degrades gracefully:
+
+| Service down | Impact | Workaround |
+|-------------|--------|------------|
+| retrieve-skills (:8765) | No automatic skill injection. Agent works from CLAUDE.md + memory only. | Start it: `Start-Process python server.py` in the retrieve-skills dir |
+| memory-index (:8055) | No semantic recall of prior decisions/patterns. | Start it: `Start-Process python server.py` in the memory-index dir |
+| Both down | Core SDD still works — spec gate, constitution, CLAUDE.md, and agents are all local files/hooks. Just no dynamic context enrichment. | Run `verify.ps1` to diagnose |
+
+### How is this different from just using Kiro's built-in Spec mode?
+
+Kiro's Spec mode gives you a structured requirements → design → tasks workflow inside the IDE. This harness extends that pattern with:
+
+1. **Machine enforcement** (Claude Code only) — you can't skip the spec even if you try
+2. **Semantic skill retrieval** — 166+ skills auto-injected per prompt based on relevance
+3. **Annealing memory** — decisions persist across sessions, promote on reuse, decay when unused
+4. **Cross-harness portability** — same workflow in Claude Code, opencode, pi, and Kiro
+5. **Constitutional framework** — 9 articles + Phase -1 gates that prevent over-engineering
+6. **Agent ladder** — escalation chain (critic → fixer_low → fixer_med → planner) for self-correction
+
+Kiro's Spec mode is the closest native equivalent to what this harness provides — but scoped to a single IDE without the retrieval, memory, or enforcement layers.
+
 ## License
 
 MIT

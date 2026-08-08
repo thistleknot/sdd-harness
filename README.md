@@ -294,6 +294,122 @@ Current GENERATE cells (need regeneration on change):
 
 **The gap:** A full `install.py` that reads manifest.toml and dispatches all GENERATE cells doesn't exist yet. Until then: `adapter.py` for MCP, junctions for LINK cells, and manual regeneration for instructions/adapter GENERATE cells.
 
+### Example calls and conformance tests
+
+These are the headless invocations used to verify each harness implements the SDD contract. Same prompts, all three harnesses — different model tiers, same expected behavior.
+
+**Invoking each harness headlessly:**
+```bash
+# Claude Code
+claude -p "your prompt here"
+
+# opencode
+opencode run "your prompt here"
+
+# pi
+pi -p "your prompt here"
+```
+
+**T1: MCP Connectivity — verify all tools respond**
+```bash
+# Skill retrieval
+claude -p "Call retrieve_skills with query 'convert PDF to markdown' and k=2. Show raw tool output."
+# Expected: response contains "PASS pdf-extraction" or "CANDIDATE pdf-extraction"
+
+# Memory
+claude -p "Call memory_stats and show raw output."
+# Expected: "Collection: memories", doc counts, type breakdown
+
+# Todo
+claude -p "Call list_todos with workspace_root='C:\\Users\\user\\.harness'. Show raw output."
+# Expected: todo items or "No pending todos"
+```
+
+**T2: Skill Retrieval Accuracy — correct skills surface for known prompts**
+```bash
+claude -p "Call retrieve_skills('convert this PDF to markdown')"
+# Expected PASS: pdf-extraction
+
+claude -p "Call retrieve_skills('isolate this repeating error')"
+# Expected PASS: debugging
+
+claude -p "Call retrieve_skills('set up experiment tracking')"
+# Expected PASS: mlflow
+
+claude -p "Call retrieve_skills('write a spec for a new feature')"
+# Expected PASS: spec or spec-new
+```
+
+**T3: Memory Lifecycle**
+```bash
+# Search
+claude -p "Call search_memory('skill router architecture')"
+# Expected: ranked results with similarity scores
+
+# Log (ephemeral)
+claude -p "Call log_memory with content='test bit for conformance' scope='global' type='reference'"
+# Expected: "Logged log:test-bit-..."
+
+# Stats
+claude -p "Call memory_stats"
+# Expected: collection count, type breakdown, log bits count
+```
+
+**T4: Todo CRUD Lifecycle**
+```bash
+# Add
+claude -p "Call add_todo with task='conformance test item' priority='low' workspace_root='C:\\Users\\user\\.harness'"
+# Expected: "Added todo #N [.harness]"
+
+# List
+claude -p "Call list_todos with workspace_root='C:\\Users\\user\\.harness'"
+# Expected: shows "conformance test item"
+
+# Complete
+claude -p "Call complete_todo with todo_id=N workspace_root='C:\\Users\\user\\.harness'"
+# Expected: "Completed todo #N"
+```
+
+**T5: Spec-First Gate (Claude Code only)**
+```bash
+# Without spec — should be blocked
+claude -p "Create a file called /tmp/test-gate.py with contents 'hello'"
+# Expected: DENIED by spec_gate.py (or agent self-enforces spec-first)
+
+# Trivial edit — should pass (mechanical exception)
+claude -p "Fix the typo 'teh' -> 'the' in README.md"
+# Expected: ALLOWED (gate exempts mechanical edits)
+```
+
+**T6: Routing Gate — model picks correct mode**
+```bash
+# Should trigger Spec mode
+claude -p "Add a new API endpoint for user authentication with OAuth2"
+# Expected: agent enters planning/spec mode, does NOT immediately write code
+
+# Should trigger Do mode (trivial)
+claude -p "Rename getUserName to getUsername in utils.py"
+# Expected: direct implementation, no spec ceremony
+```
+
+**What a successful route looks like (from server.log):**
+```
+INFO:skill-router:route: 2 accepted [('spec-new', 21.031, 3.163), ('spec-next', 19.971, 2.102)]
+INFO:skill-router:route: 2 accepted [('debugging', 19.704, 1.834), ('retrieve-skills', 20.976, 3.105)]
+INFO:skill-router:route: 0 accepted []
+```
+
+The format is: `(skill_name, rerank_score, margin_above_median)`. A margin ≥ 1.5 passes the gate. `0 accepted []` means nothing was relevant — the system correctly stayed silent rather than injecting noise.
+
+**Running the full conformance suite:**
+```bash
+# Per-harness (requires CLI + MCP services running)
+python ~/.harness/tests/test_claude_code.py
+
+# Health check (all harnesses, no headless invocation)
+powershell -File ~/.harness/scripts/verify.ps1
+```
+
 ### How do I use this in a new Claude Code session?
 
 You don't do anything special — just open a session and talk to it.

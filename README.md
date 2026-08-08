@@ -258,6 +258,42 @@ Built on patterns from:
 
 ## FAQ
 
+### How do I port updates across all 3 harnesses?
+
+There are two mechanisms depending on what changed:
+
+**MCP server changes** (adding/removing/reconfiguring a server):
+```powershell
+# Edit the single source of truth
+notepad ~/.harness/harness.json
+
+# Sync to all harnesses in one command
+python ~/.harness/adapter.py --target all
+```
+
+This handles the polarity inversion automatically (opencode uses `enabled: true`, Kiro uses `disabled: false`).
+
+**Everything else** depends on the strategy in `manifest.toml`:
+
+| Strategy | What happens | Your action |
+|----------|-------------|-------------|
+| **LINK** | Directory junction — both sides see the same bytes | Nothing. Edit once, propagates instantly. |
+| **GENERATE** | Formats differ — must emit native form from canonical source | Re-run the generator (or `install.py` once built) |
+| **SKIP** | Capability absent in that harness | Nothing to port. |
+
+Current LINK cells (zero-effort sync):
+- `policy/` → Claude + pi + opencode (all share the same gate logic)
+- `steering/` → Kiro (native frontmatter = our interlingua)
+- `agents/` → Claude (markdown + YAML frontmatter matches)
+- `skills/` → Claude + pi (same SKILL.md format)
+
+Current GENERATE cells (need regeneration on change):
+- Instructions → Claude (`CLAUDE.md`), opencode (plugin), pi (extension)
+- Adapter/gate → Claude (`settings.json` hooks entry), opencode (`spec-gate.ts`)
+- MCP → all three (handled by `adapter.py`)
+
+**The gap:** A full `install.py` that reads manifest.toml and dispatches all GENERATE cells doesn't exist yet. Until then: `adapter.py` for MCP, junctions for LINK cells, and manual regeneration for instructions/adapter GENERATE cells.
+
 ### How do I use this in a new Claude Code session?
 
 You don't do anything special — just open a session and talk to it.
@@ -333,42 +369,6 @@ pi inherits most of its SDD configuration from Claude Code's user-scope settings
 # Invoke headlessly for conformance testing
 pi -p "list all MCP servers"
 ```
-
-### How do I port updates across all 3 harnesses?
-
-There are two mechanisms depending on what changed:
-
-**MCP server changes** (adding/removing/reconfiguring a server):
-```powershell
-# Edit the single source of truth
-notepad ~/.harness/harness.json
-
-# Sync to all harnesses in one command
-python ~/.harness/adapter.py --target all
-```
-
-This handles the polarity inversion automatically (opencode uses `enabled: true`, Kiro uses `disabled: false`).
-
-**Everything else** depends on the strategy in `manifest.toml`:
-
-| Strategy | What happens | Your action |
-|----------|-------------|-------------|
-| **LINK** | Directory junction — both sides see the same bytes | Nothing. Edit once, propagates instantly. |
-| **GENERATE** | Formats differ — must emit native form from canonical source | Re-run the generator (or `install.py` once built) |
-| **SKIP** | Capability absent in that harness | Nothing to port. |
-
-Current LINK cells (zero-effort sync):
-- `policy/` → Claude + pi + opencode (all share the same gate logic)
-- `steering/` → Kiro (native frontmatter = our interlingua)
-- `agents/` → Claude (markdown + YAML frontmatter matches)
-- `skills/` → Claude + pi (same SKILL.md format)
-
-Current GENERATE cells (need regeneration on change):
-- Instructions → Claude (`CLAUDE.md`), opencode (plugin), pi (extension)
-- Adapter/gate → Claude (`settings.json` hooks entry), opencode (`spec-gate.ts`)
-- MCP → all three (handled by `adapter.py`)
-
-**The gap:** A full `install.py` that reads manifest.toml and dispatches all GENERATE cells doesn't exist yet. Until then: `adapter.py` for MCP, junctions for LINK cells, and manual regeneration for instructions/adapter GENERATE cells.
 
 ### Why can't Kiro enforce the spec gate?
 

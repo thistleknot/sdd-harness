@@ -1,0 +1,42 @@
+{
+  "_comment": "Shared harness config. Run `python adapter.py` to sync to all harnesses.",
+  "mcp_servers": {
+    "retrieve-skills": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    },
+    "memory-index": {
+      "type": "http",
+      "url": "http://127.0.0.1:8055/mcp"
+    },
+    "todo": {
+      "type": "stdio",
+      "command": "c:/users/user/py310/Scripts/python.exe",
+      "args": ["C:/Users/user/.claude/skills/.skills/todo/todo_mcp.py"]
+    },
+    "data-science-skills": {
+      "type": "stdio",
+      "command": "c:/users/user/py310/Scripts/python.exe",
+      "args": ["C:/Users/user/.claude/skills/.skills/parallel-rrf-graph-rag-hybrid-cascade-mmr-late-retriever/scripts/mcp_server.py"],
+      "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    }
+  },
+  "model_routing": {
+    "claude-code": {
+      "orchestrator": "claude-sonnet-5",
+      "planner": "claude-opus-5",
+      "critic": "claude-sonnet-5",
+      "fixer": "claude-opus-4-8",
+      "architect": "claude-fable-5",
+      "worker": "claude-haiku-4.5"
+    },
+    "local": {
+      "orchestrator": "qwopus-coding-thinking-256k:4b",
+      "planner": "qwen3.5-reasoning-thinking-256k:9b",
+      "critic": "qwen3.5-oc:4b",
+      "fixer": "qwen3.5-reasoning-thinking-256k:9b",
+      "architect": "hf.co/huihui-ai/Huihui-gemma-4-12B-agentic-fable5-abliterated-GGUF:Huihui-gemma4-v2-abliterated-Q8_0.gguf",
+      "worker": "qwen3.5-oc:2b"
+    }
+  }
+}

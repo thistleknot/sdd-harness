@@ -1,0 +1,13 @@
+# Cloned reference repos (large, not ours)
+references/
+hookhub-reference/
+
+# Temp/output files
+__pycache__/
+*.pyc
+.pytest_cache/
+chess-deep-q-err.txt
+chess-deep-q-output.txt
+prompt.txt
+index.db
+manifest.toml

@@ -413,118 +413,82 @@ If they're down, skills and memory won't inject, but the spec gate and CLAUDE.md
 
 ### How does this harness replicate Kiro's modes?
 
-Kiro has 5 built-in workflow modes. This harness replicates each one inside Claude Code, opencode, and pi using slash commands, skills, and a routing gate. Here's how a real interactive session flows:
+**You don't need to type commands. The orchestrator infers the mode from your prompt.**
 
-**Spec mode — the full SDD lifecycle (conversational)**
+The routing gate evaluates every message and picks: Spec, Bug Fix, Plan, or Do. The `retrieve-skills` server fires on every prompt and injects the relevant skill (debugging, spec-new, etc.) if semantically matched. The `spec_gate.py` hook is the backstop — if the repo is armed (`.spec/` exists) and no spec is approved, it blocks writes regardless of what anyone decided.
 
-This is the core workflow. You don't pass a single `-p` flag — you have a multi-turn session:
-
-```
-YOU:   /spec-init
-AGENT: Armed. Created .spec/ tree, steering docs populated from codebase.
-       Gate is live — source edits blocked until a spec reaches 'implement'.
-
-YOU:   /spec-new user-auth --scope 'src/auth/**'
-AGENT: Opened spec 'user-auth'. Drafted requirements.md with EARS clauses.
-       Review it and run /spec-approve requirements when satisfied.
-
-YOU:   [reviews requirements.md, gives feedback]
-       The OAuth flow should support PKCE. Add that.
-
-AGENT: Updated requirements.md with PKCE requirement. Ready for approval.
-
-YOU:   /spec-approve requirements
-AGENT: Requirements approved. Run /spec-next to advance to design.
-
-YOU:   /spec-next
-AGENT: Advanced to 'design'. Drafted design.md — components, contracts,
-       sequence of operations. Review and /spec-approve design.
-
-YOU:   /spec-approve design
-
-YOU:   /spec-next
-AGENT: Advanced to 'tasks'. Drafted tasks.md — 6 discrete steps.
-       Review and /spec-approve tasks.
-
-YOU:   /spec-approve tasks
-AGENT: Advanced to 'implement'. Source edits now unlocked for src/auth/**.
-       Working through tasks...
-```
-
-That's the full Kiro Spec mode equivalent: requirements → design → tasks → implement, with human approval gates between each phase. The `spec_gate.py` hook *blocks all file writes* until you reach `implement`.
-
-**Bug Fix mode — root-cause isolation**
-
-No ceremony needed. The `debugging` skill auto-injects when your prompt sounds like a bug:
+**What a normal session looks like (auto mode):**
 
 ```
-YOU:   The /users endpoint returns 500 when page > 10. Find the root cause.
-AGENT: [debugging skill injected automatically]
+YOU:   I need user authentication with OAuth2 and PKCE support.
+AGENT: [routing gate → Spec mode; spec-new skill injected]
+       This touches auth control flow and public interfaces — entering spec mode.
+       Drafted requirements.md with EARS clauses. Review and let me know.
+
+YOU:   Looks good, but add refresh token rotation.
+AGENT: Updated. Ready for approval when you're satisfied.
+
+YOU:   Approved. Go ahead with design.
+AGENT: [advances to design phase]
+       Drafted design.md — components, contracts, token flow sequence.
+
+YOU:   Approved. Build it.
+AGENT: [advances to tasks → implement; gate unlocks writes]
+       Working through 6 tasks...
+       Done. All acceptance criteria met.
+```
+
+No slash commands. No mode selection. You just talked about what you wanted and the system figured out it needed spec-first discipline, walked through the phases, and only wrote code after approval.
+
+**Another session — bug fix (auto):**
+
+```
+YOU:   The /users endpoint returns 500 when page > 10.
+AGENT: [routing gate → Do; debugging skill injected]
        Walking backward through the chain...
-       Root cause: offset calculation overflows when page * limit > row count.
-       Fix: clamp offset to min(offset, total_rows).
+       Root cause: offset calculation overflows when page * limit > total rows.
+       Fixed. Clamped offset. Tests pass.
 ```
 
-No `/spec-new --fix` unless you *want* the full lifecycle. For quick fixes, just describe the bug and the routing gate picks "Do" mode.
+No ceremony. The skill injected root-first isolation protocol automatically.
 
-**Plan mode — think without writing**
-
-```
-YOU:   Plan only: how should we restructure auth to support SSO?
-AGENT: [routing gate picks 'Answer' — no file mutations]
-       Three options...
-       1. Extend current OAuth adapter with SAML bridge
-       2. Abstract auth behind a strategy pattern
-       3. Replace with passport.js
-       Recommendation: option 1, because...
-```
-
-The phrase "plan only" or "don't write any files" signals read-only mode. No spec gate involved — the agent simply doesn't invoke write tools.
-
-**Quick Spec mode — compressed (skip manual review)**
+**Another session — planning (auto):**
 
 ```
-YOU:   Build a /api/health endpoint returning {status: ok, uptime: N}.
-       Spec it and implement — no review needed.
-AGENT: [produces requirements + design + tasks internally, then implements]
-       Created src/api/health.py with the endpoint. Tests pass.
+YOU:   How should we restructure auth to support SSO?
+AGENT: [routing gate → Answer; no file mutations]
+       Three approaches...
+       Recommendation: extend current OAuth adapter with SAML bridge because...
 ```
 
-For small well-scoped features where you trust the agent. Equivalent to collapsing all `/spec-approve` steps into one turn.
-
-**Default/Vibe mode — just do it**
-
-```
-YOU:   Rename getUserName to getUsername everywhere
-AGENT: [routing gate picks 'Do' — mechanical edit, gate exempts]
-       Renamed across 4 files. Done.
-```
-
-Trivial tasks skip the spec entirely. The gate exempts mechanical edits (renames, typo fixes, formatting) with a one-line justification.
+No writes, no spec. It recognized this as a question and stayed read-only.
 
 ---
 
-**How the routing gate decides (auto mode):**
+**Slash commands are optional overrides — use them when auto gets it wrong:**
 
-By default, the agent decides which mode to use based on your prompt:
+| Command | When to use it |
+|---------|---------------|
+| `/spec-init` | Arm a repo for the first time (creates `.spec/` tree, turns on the gate) |
+| `/spec-new <name>` | Force spec mode when the orchestrator didn't enter it |
+| `/spec-next` | Manually advance to the next phase |
+| `/spec-approve <phase>` | Approve the current artifact (human gate — agent can't do this) |
+| `/spec-status` | Check where the active spec is in its lifecycle |
+| "Plan only:" prefix | Force read-only when the agent wants to code |
+| "No spec needed:" | Signal you want Do mode on something the gate might block |
 
-| Your prompt sounds like... | Mode triggered | Gate behavior |
-|---------------------------|----------------|--------------|
-| "Add a new feature", "implement X", "build Y" | Spec | Blocks writes until spec approved |
-| "Fix this bug", "why is this broken" | Bug Fix | debugging skill injects, allows writes |
-| "Plan", "think through", "how should we" | Plan | No writes, analysis only |
-| "Rename", "fix typo", "format" | Do | Allows writes (mechanical exemption) |
-| Question / explanation | Answer | No tools, just responds |
+**The one command you WILL use:** `/spec-approve`. The agent cannot approve its own work — that's the human gate. Everything else is inferred.
 
-**Forcing a mode explicitly:**
+**How the auto-routing decides:**
 
-If the auto-routing gets it wrong, override with slash commands:
-- `/spec-new <name>` — force into Spec mode for this feature
-- `/spec-init` — arm the whole repo for spec-driven development
-- "Plan only:" prefix — force read-only
-- "Just do it:" or "No spec needed:" — signal you want Do mode
+| Your prompt sounds like... | Mode | Gate behavior |
+|---------------------------|------|--------------|
+| New feature / "build X" / "add Y" | Spec | Blocks writes until spec approved |
+| Bug / error / "why is this broken" | Bug Fix | Allows writes, debugging skill injects |
+| Question / "how should we" / "plan" | Plan | No writes, analysis only |
+| Rename / typo / format / mechanical | Do | Allows writes (gate exempts) |
 
-**The key difference from Kiro:** In Kiro you click a dropdown to pick the mode. Here, the routing gate picks for you (auto), or you override with slash commands. And in Claude Code, if the gate picks wrong and you try to write code without a spec in a spec-armed repo, `spec_gate.py` denies the write. That backstop doesn't exist in Kiro.
+In Claude Code, `spec_gate.py` is the backstop. In opencode, `spec-gate.ts` does the same via plugin. In pi, the extension gate returns `{block: true}`. All three enforce the same rule: no writes without an approved spec in a spec-armed repo.
 
 ### How do I use this in opencode?
 

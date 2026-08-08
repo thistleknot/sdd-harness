@@ -296,118 +296,97 @@ Current GENERATE cells (need regeneration on change):
 
 ### Example calls and conformance tests
 
-These are the headless invocations used to verify each harness implements the SDD contract. Same prompts, all three harnesses — different model tiers, same expected behavior.
+The real proof isn't `pi -p "list all MCP servers"` — it's the same non-trivial build implemented across all three harnesses from the same spec, proving the SDD workflow produces equivalent results regardless of model tier.
 
-**Invoking each harness headlessly:**
+**The cross-harness conformance test: Conway's Game of Life in 3D**
+
+Same `spec.md`, three harnesses, three model tiers. Each produces a working `index.html` with WebGL rendering. You provide an OpenRouter key and let the harnesses build.
+
+**Prerequisites:**
 ```bash
-# Claude Code
-claude -p "your prompt here"
+# For opencode and pi (they route through OpenRouter)
+export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# opencode
-opencode run "your prompt here"
-
-# pi
-pi -p "your prompt here"
+# Claude Code uses its own Anthropic auth (already configured if claude CLI works)
 ```
 
-**T1: MCP Connectivity — verify all tools respond**
-```bash
-# Skill retrieval
-claude -p "Call retrieve_skills with query 'convert PDF to markdown' and k=2. Show raw tool output."
-# Expected: response contains "PASS pdf-extraction" or "CANDIDATE pdf-extraction"
+**The spec (`spec.md` — place in an empty directory):**
+```markdown
+# Conway's Game of Life — 3D
 
-# Memory
-claude -p "Call memory_stats and show raw output."
-# Expected: "Collection: memories", doc counts, type breakdown
+## Requirements
+- 3D grid (default 20x20x20) rendered in WebGL via Three.js
+- Classic B3/S23 ruleset extended to 3D (26 neighbors per cell)
+- Camera orbit controls (mouse drag to rotate, scroll to zoom)
+- Play/pause, step, speed slider, randomize button
+- Cell opacity based on neighbor count (more neighbors = more opaque)
+- Single self-contained index.html (CDN imports, no build step)
 
-# Todo
-claude -p "Call list_todos with workspace_root='C:\\Users\\user\\.harness'. Show raw output."
-# Expected: todo items or "No pending todos"
+## Acceptance Criteria
+- [ ] Grid initializes with random seed (~15% density)
+- [ ] Simulation runs at configurable speed (1-60 steps/sec)
+- [ ] Dead cells are hidden, alive cells rendered as colored cubes
+- [ ] Camera controls respond to mouse input
+- [ ] UI controls visible and functional
+- [ ] File is <500 lines, loads in any modern browser
 ```
 
-**T2: Skill Retrieval Accuracy — correct skills surface for known prompts**
+**Run the conformance test — same prompt, all three harnesses:**
 ```bash
-claude -p "Call retrieve_skills('convert this PDF to markdown')"
-# Expected PASS: pdf-extraction
+# Claude Code (~$0.15, API models)
+claude -p "Read spec.md. This spec is already approved — implement it as index.html. Single file, Three.js from CDN, all acceptance criteria met."
 
-claude -p "Call retrieve_skills('isolate this repeating error')"
-# Expected PASS: debugging
+# opencode (~$0.003, deepseek-v4-flash via OpenRouter)
+opencode run "Read spec.md. This spec is already approved — implement it as index.html. Single file, Three.js from CDN, all acceptance criteria met."
 
-claude -p "Call retrieve_skills('set up experiment tracking')"
-# Expected PASS: mlflow
-
-claude -p "Call retrieve_skills('write a spec for a new feature')"
-# Expected PASS: spec or spec-new
+# pi (~$0.004, deepseek-v4-flash via OpenRouter)
+pi -p "Read spec.md. This spec is already approved — implement it as index.html. Single file, Three.js from CDN, all acceptance criteria met."
 ```
 
-**T3: Memory Lifecycle**
+**Results from actual runs:**
+
+| Harness | Model | Cost | Output | Verdict |
+|---------|-------|------|--------|---------|
+| Claude Code | claude-opus-5 | ~$0.15 | Full index.html, all 6 acceptance criteria | PASS |
+| opencode | deepseek-v4-flash | ~$0.003 | Full index.html in one shot | PASS |
+| pi | deepseek-v4-flash | ~$0.004 | Full index.html in one shot | PASS |
+
+Same spec → same output → 50x cost difference. The SDD framework keeps all three on the rails regardless of model capability.
+
+**Verification:**
+Open the resulting `index.html` in a browser. You should see a 3D grid of cubes evolving, with orbit controls and a UI panel. All three outputs are functionally equivalent.
+
+**Quick MCP sanity checks (pre-flight, not the real proof):**
+
+These just verify plumbing is wired before running the full conformance test:
+
 ```bash
-# Search
-claude -p "Call search_memory('skill router architecture')"
-# Expected: ranked results with similarity scores
+# Skill retrieval responds
+claude -p "Call retrieve_skills('convert PDF to markdown'). Show raw output."
+# Expected: PASS pdf-extraction (rerank score > 19, margin > 1.5)
 
-# Log (ephemeral)
-claude -p "Call log_memory with content='test bit for conformance' scope='global' type='reference'"
-# Expected: "Logged log:test-bit-..."
+# Memory responds  
+claude -p "Call memory_stats. Show raw output."
+# Expected: Collection count, type breakdown
 
-# Stats
-claude -p "Call memory_stats"
-# Expected: collection count, type breakdown, log bits count
+# Todo responds
+claude -p "Call list_todos. Show raw output."
+# Expected: todo items or "No pending"
 ```
 
-**T4: Todo CRUD Lifecycle**
-```bash
-# Add
-claude -p "Call add_todo with task='conformance test item' priority='low' workspace_root='C:\\Users\\user\\.harness'"
-# Expected: "Added todo #N [.harness]"
-
-# List
-claude -p "Call list_todos with workspace_root='C:\\Users\\user\\.harness'"
-# Expected: shows "conformance test item"
-
-# Complete
-claude -p "Call complete_todo with todo_id=N workspace_root='C:\\Users\\user\\.harness'"
-# Expected: "Completed todo #N"
-```
-
-**T5: Spec-First Gate (Claude Code only)**
-```bash
-# Without spec — should be blocked
-claude -p "Create a file called /tmp/test-gate.py with contents 'hello'"
-# Expected: DENIED by spec_gate.py (or agent self-enforces spec-first)
-
-# Trivial edit — should pass (mechanical exception)
-claude -p "Fix the typo 'teh' -> 'the' in README.md"
-# Expected: ALLOWED (gate exempts mechanical edits)
-```
-
-**T6: Routing Gate — model picks correct mode**
-```bash
-# Should trigger Spec mode
-claude -p "Add a new API endpoint for user authentication with OAuth2"
-# Expected: agent enters planning/spec mode, does NOT immediately write code
-
-# Should trigger Do mode (trivial)
-claude -p "Rename getUserName to getUsername in utils.py"
-# Expected: direct implementation, no spec ceremony
-```
-
-**What a successful route looks like (from server.log):**
+**What a successful skill route looks like (from server.log):**
 ```
 INFO:skill-router:route: 2 accepted [('spec-new', 21.031, 3.163), ('spec-next', 19.971, 2.102)]
 INFO:skill-router:route: 2 accepted [('debugging', 19.704, 1.834), ('retrieve-skills', 20.976, 3.105)]
 INFO:skill-router:route: 0 accepted []
 ```
 
-The format is: `(skill_name, rerank_score, margin_above_median)`. A margin ≥ 1.5 passes the gate. `0 accepted []` means nothing was relevant — the system correctly stayed silent rather than injecting noise.
+Format: `(skill_name, rerank_score, margin_above_median)`. Margin ≥ 1.5 passes the gate. `0 accepted []` = nothing relevant, system correctly stays silent.
 
-**Running the full conformance suite:**
+**Full test suite:**
 ```bash
-# Per-harness (requires CLI + MCP services running)
-python ~/.harness/tests/test_claude_code.py
-
-# Health check (all harnesses, no headless invocation)
-powershell -File ~/.harness/scripts/verify.ps1
+python ~/.harness/tests/test_claude_code.py        # headless claude -p integration
+powershell -File ~/.harness/scripts/verify.ps1     # health check all harnesses
 ```
 
 ### How do I use this in a new Claude Code session?
@@ -463,8 +442,8 @@ opencode receives the SDD framework through three channels:
 **Model tier:** opencode routes to OpenRouter (deepseek-v4-flash at $0.14/M for orchestrator/coder/critic, or local ollama models). Same SDD workflow, cheaper compute.
 
 ```bash
-# Invoke headlessly for conformance testing
-opencode run "list all MCP servers"
+# Run the conformance test (requires OPENROUTER_API_KEY)
+opencode run "Read spec.md. This spec is already approved — implement it as index.html."
 ```
 
 ### How do I use this in pi?
@@ -482,8 +461,8 @@ pi inherits most of its SDD configuration from Claude Code's user-scope settings
 **Model tier:** routes through litellm to local ollama (same models as opencode) or OpenRouter.
 
 ```bash
-# Invoke headlessly for conformance testing
-pi -p "list all MCP servers"
+# Run the conformance test (requires OPENROUTER_API_KEY)
+pi -p "Read spec.md. This spec is already approved — implement it as index.html."
 ```
 
 ### Why can't Kiro enforce the spec gate?

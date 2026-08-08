@@ -479,6 +479,23 @@ No writes, no spec. It recognized this as a question and stayed read-only.
 
 **The one command you WILL use:** `/spec-approve`. The agent cannot approve its own work — that's the human gate. Everything else is inferred.
 
+**Plan mode (native) — the prep phase:**
+
+All three harnesses have a built-in plan mode (Shift+Tab in Claude Code, Tab in opencode). It's read-only — the agent can't write files. This harness defines what the agent *does* during plan mode:
+
+- **Plan mode = prep phase for whatever mode the orchestrator picked.** The agent researches, forms hypotheses, structures the approach.
+- **On exit, the first write is always the plan itself.** Never discard planning work. The plan persists as `plan.md`, `requirements.md`, or `bugfix.md` depending on context.
+- **Plan mode feeds the spec lifecycle.** If you enter plan mode on a feature task, the output becomes the requirements artifact. If on a bug, it becomes the diagnosis. The spec gate doesn't block writes to `.spec/` artifacts, so writing the plan is always allowed.
+
+| What you're prepping | Plan mode produces | First write on exit |
+|---------------------|-------------------|---------------------|
+| New feature | Requirements + scope analysis | `requirements.md` |
+| Bug fix | Root-cause hypothesis + isolation steps | `bugfix.md` or `plan.md` |
+| Architecture question | Options analysis + recommendation | `plan.md` (stop there) |
+| Quick implementation | Compressed spec + task list | Full spec artifacts, then code |
+
+This means you can use plan mode naturally — toggle it on, describe what you need, let the agent prep, toggle it off, and it immediately writes the structured plan before touching any source code.
+
 **How the auto-routing decides:**
 
 | Your prompt sounds like... | Mode | Gate behavior |

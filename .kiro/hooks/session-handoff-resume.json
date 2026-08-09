@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Resume from Handoff Prompt",
+      "trigger": "SessionStart",
+      "description": "On session start, check for an existing prompt.md from a prior handoff and inject it as seed context so the agent can resume where the last session left off",
+      "action": {
+        "type": "command",
+        "command": "python C:/Users/user/.harness/hooks/session_resume.py"
+      }
+    }
+  ]
+}

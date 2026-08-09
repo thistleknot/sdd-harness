@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Generate Unit Tests After Code Write",
+      "trigger": "PostToolUse",
+      "description": "After code is written or edited, prompt the agent to generate or update unit tests for the modified file. Adapted from dotnet/skills code-testing-generator (Direct strategy).",
+      "matcher": "fs_write|str_replace",
+      "action": {
+        "type": "agent",
+        "prompt": "You just wrote or edited a source code file. Follow this test generation protocol:\n\n## Gate Check\nFirst, determine if test generation applies:\n- SKIP if the file is itself a test file (contains \"test\", \"spec\", or \"Test\" in path/name)\n- SKIP if the file is configuration only (.json, .toml, .yaml, .md, .env, .gitignore)\n- SKIP if the file is a hook, script utility, or infrastructure glue (not business logic)\n- PROCEED if the file contains functions, classes, or logic that can be unit-tested\n\nIf SKIP, do nothing further. No output needed.\n\n## If PROCEED — Direct Strategy Test Generation\n\nYou are polyglot. Detect the language from the file extension and content.\n\n### 1. Discover Conventions\n- Look for existing test files in the project (test/, tests/, __tests__/, *_test.*, *.spec.*, *.test.*)\n- Match the existing framework (pytest, jest, vitest, xunit, nunit, go test, etc.)\n- Match naming conventions (e.g., test_<module>.py, <Module>.test.ts, <Module>Tests.cs)\n- If no tests exist yet, use the language's standard test framework\n\n### 2. Identify Test Targets\nFrom the file just modified, identify:\n- Public functions and methods (priority)\n- Edge cases implied by conditionals and guards\n- Error paths (try/except, if err != nil, throw)\n- Boundary conditions (empty inputs, max values, type coercion)\n\n### 3. Write Tests\n- Add tests to the existing test file for this module if one exists\n- Create a new test file only if none exists for this module\n- Each test asserts on concrete return values — not just type checks or non-null\n- Each test would FAIL if the function body were emptied (no tautologies)\n- Mock external dependencies; never call real network/DB/filesystem\n- Keep tests focused: one behavior per test function\n\n### 4. Verify\n- Run the test command for the project (detect from package.json scripts, pytest.ini, Makefile, etc.)\n- If tests fail: read the production code, fix the assertion, re-run\n- Never skip or ignore a failing test\n\n### 5. Report (brief)\nState: how many tests added/updated, which file, pass/fail status. One or two lines max.\n\n## Constraints\n- Do NOT generate tests for trivial getters/setters unless they contain logic\n- Do NOT create test infrastructure (conftest.py, jest.config.js) unless none exists\n- Do NOT modify the source file that was just written\n- Preserve all existing tests — append only\n- If unsure whether to test: ask the user rather than generating noise"
+      }
+    }
+  ]
+}

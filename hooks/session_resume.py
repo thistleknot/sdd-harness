@@ -1,0 +1,83 @@
+"""SessionStart hook: inject existing prompt.md as seed context.
+
+Purpose: on session start, check for a handoff prompt.md from a prior session
+and output its content so it gets injected as seed context.
+
+Lookup order:
+  1. ~/memory-bank/projects/<repo>/prompt.md (project-specific)
+  2. ~/memory-bank/handoffs/prompt-*.md (latest global fallback)
+
+If found, prints content to stdout (exit 0 → forwarded as context).
+If not found, prints nothing (exit 0 → no-op).
+
+Preconditions: hook registered on SessionStart.
+Failure modes: any error → exit 0 (fail-open).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+MEMORY_DIR = Path(os.path.expanduser("~/memory-bank"))
+
+
+def get_git_root() -> str | None:
+    """Get the git repo name from CWD."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return Path(result.stdout.strip()).name
+    except Exception:
+        pass
+    return None
+
+
+def find_prompt_md() -> Path | None:
+    """Find the most relevant prompt.md for the current context."""
+    # 1. Project-specific
+    repo = get_git_root()
+    if repo:
+        project_prompt = MEMORY_DIR / "projects" / repo / "prompt.md"
+        if project_prompt.exists():
+            return project_prompt
+
+    # 2. Global fallback — latest handoff prompt
+    handoffs_dir = MEMORY_DIR / "handoffs"
+    if handoffs_dir.exists():
+        candidates = sorted(
+            handoffs_dir.glob("prompt-*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if candidates:
+            return candidates[0]
+
+    return None
+
+
+def main():
+    try:
+        # Consume stdin if provided (hook payload), but we don't need it
+        if not sys.stdin.isatty():
+            try:
+                json.load(sys.stdin)
+            except Exception:
+                pass
+
+        prompt_path = find_prompt_md()
+        if prompt_path:
+            content = prompt_path.read_text(encoding="utf-8")
+            # Emit as context injection
+            print(content)
+    except Exception:
+        pass  # fail-open
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

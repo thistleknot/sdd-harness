@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Session Handoff on Stop",
+      "trigger": "Stop",
+      "description": "When a session ends, prompt the agent to offer context migration/handoff to the user before closing out",
+      "action": {
+        "type": "agent",
+        "prompt": "Before this session closes, offer the user a session handoff. Ask:\n\n\"Would you like me to package this session's context for continuity?\"\n- **Migrate** — write prompt.md and continue fresh (simulates compact without losing state)\n- **Close** — task is done, archive and wrap up\n- **Handoff** — write prompt.md for a future session to pick up\n\nIf the user chooses migrate or handoff, invoke the handoff script:\n```\npython ~/.harness/hooks/session_handoff.py --mode <mode> --workspace <cwd> --objective \"<current objective>\" --state '<json>' --decisions '<json>' --files '<json>' --next-steps '<json>'\n```\n\nPopulate the fields from your knowledge of this session:\n- objective: what we were trying to achieve\n- state: {\"done\": [...], \"in_progress\": [...], \"pending\": [...], \"blocked\": [...]}\n- decisions: key choices that shouldn't be re-litigated\n- files: files modified or read during this session\n- next-steps: concrete actions to resume from\n\nIf the user says \"close\" or the task is clearly complete, use --mode close.\nIf the user doesn't respond or declines, do nothing — fail-open."
+      }
+    }
+  ]
+}

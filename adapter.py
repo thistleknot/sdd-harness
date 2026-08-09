@@ -51,7 +51,9 @@ def sync_opencode(config: dict) -> None:
 
     # opencode uses JSONC — strip comments and control chars before parsing
     text = oc_json.read_text(encoding="utf-8")
-    clean = re.sub(r"//[^\n]*", "", text)
+    # Strip single-line comments, but not // inside strings
+    # Strategy: only strip // that appears at the start of a line (optionally indented)
+    clean = re.sub(r"^\s*//[^\n]*", "", text, flags=re.MULTILINE)
     clean = re.sub(r"[\x00-\x1f]", " ", clean)  # strip control chars
     clean = re.sub(r",\s*([}\]])", r"\1", clean)  # strip trailing commas
     try:

@@ -62,10 +62,17 @@ def scan_file(path: str) -> list[str]:
 
 
 def main():
+    payload = {}
     try:
-        json.load(sys.stdin)
+        if not sys.stdin.isatty():
+            payload = json.load(sys.stdin)
     except Exception:
         pass
+
+    # Guard: if Stop hook is re-firing (blocking loop), exit silently.
+    # Claude Code sets stop_hook_active=true on re-entrant Stop invocations.
+    if payload.get("stop_hook_active"):
+        return 0
 
     files = get_recently_modified_files()
     if not files:

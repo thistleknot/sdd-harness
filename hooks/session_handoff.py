@@ -239,6 +239,11 @@ def main():
         except Exception:
             pass
 
+    # Guard: if Stop hook is re-firing (blocking loop), exit silently.
+    # Claude Code sets stop_hook_active=true on re-entrant Stop invocations.
+    if payload.get("stop_hook_active"):
+        return 0
+
     # CLI args override payload
     parser = argparse.ArgumentParser(description="Session handoff: generate prompt.md")
     parser.add_argument("--mode", choices=["migrate", "close", "handoff"], default=None)

@@ -7,7 +7,7 @@ A cross-harness agentic development environment — spec-driven development, deb
 A drop-in developer harness that gives your AI coding agent:
 
 - **Spec-first enforcement** — a PreToolUse hook that blocks file mutations until a spec is approved
-- **Semantic skill retrieval** — ColBERT-reranked auto-injection of relevant skills per prompt ([160+ skills](https://github.com/thistleknot/skills), separate repo)
+- **Semantic skill retrieval** — ColBERT-reranked auto-injection of relevant skills per prompt ([skill store](https://github.com/thistleknot/skills), separate repo)
 - **Constitutional gates** — 9 immutable articles + Phase -1 checklists that prevent over-engineering, premature abstraction, and speculative code
 - **Annealing memory** — bits you work out get logged; recalled 3+ times they promote to durable markdown; unused bits decay
 - **Session lifecycle** — automatic handoff/resume between sessions so context survives across boundaries
@@ -37,7 +37,7 @@ git clone https://github.com/thistleknot/sdd-harness ~/.harness
 git clone https://github.com/thistleknot/skills ~/.skills
 ```
 
-The skill store contains 160+ skills covering debugging, spec workflows, reasoning, code quality, data science, orchestration, and more. The harness references this store via the retrieve-skills server.
+The skill store covers debugging, spec workflows, reasoning, code quality, data science, orchestration, and more. The harness references this store via the retrieve-skills server.
 
 ### 3. Run setup
 
@@ -173,7 +173,7 @@ Scripts are harness-agnostic. Wiring is the only harness-specific layer. See `de
 
 ## Skill Retrieval
 
-The skill store lives in a [separate repository](https://github.com/thistleknot/skills) (`~/.skills/`, 160+ skills). The retrieve-skills server:
+The skill store lives in a [separate repository](https://github.com/thistleknot/skills) (`~/.skills/`). The retrieve-skills server:
 
 1. Embeds skill descriptions (MiniLM-L6, 384-dim)
 2. Indexes in SQLite with content-hash checkpointing
@@ -248,7 +248,7 @@ Then reindex: `curl -X POST http://127.0.0.1:8765/reindex`
 ├── spec/                          # SDD workflow skill
 ├── reasoning/                     # Six Hats, TRIZ, OODA
 ├── continuity-log/                # Session lifecycle skill
-├── ...                            # 160+ more skills
+├── ...                            # many more
 └── README.md
 ```
 

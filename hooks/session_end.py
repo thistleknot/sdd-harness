@@ -33,10 +33,16 @@ def get_git_root():
 
 
 def main():
+    payload = {}
     try:
-        payload = json.load(sys.stdin)
+        if not sys.stdin.isatty():
+            import select
+            # On Windows, select doesn't work on stdin — just try with a short read
+            raw = sys.stdin.read()
+            if raw.strip():
+                payload = json.loads(raw)
     except Exception:
-        return 0
+        pass  # fail-open: proceed with empty payload
 
     repo = get_git_root()
     if repo:

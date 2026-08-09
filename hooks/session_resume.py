@@ -42,14 +42,33 @@ def get_git_root() -> str | None:
 
 def find_prompt_md() -> Path | None:
     """Find the most relevant prompt.md for the current context."""
-    # 1. Project-specific
+    # 1. Project root (CWD or git root) — the canonical location
+    cwd_prompt = Path.cwd() / "prompt.md"
+    if cwd_prompt.exists():
+        return cwd_prompt
+
     repo = get_git_root()
+    if repo:
+        # Try git root directly
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                root_prompt = Path(result.stdout.strip()) / "prompt.md"
+                if root_prompt.exists():
+                    return root_prompt
+        except Exception:
+            pass
+
+    # 2. Legacy location (memory-bank) — for backward compat
     if repo:
         project_prompt = MEMORY_DIR / "projects" / repo / "prompt.md"
         if project_prompt.exists():
             return project_prompt
 
-    # 2. Global fallback — latest handoff prompt
+    # 3. Global fallback — latest handoff prompt
     handoffs_dir = MEMORY_DIR / "handoffs"
     if handoffs_dir.exists():
         candidates = sorted(

@@ -219,15 +219,25 @@ def resolve_output_path(workspace: str | None, mode: str) -> Path:
         prefix = f"{repo}-" if repo else ""
         return HANDOFF_DIR / f"{prefix}closed-{timestamp}.md"
 
-    # For migrate and handoff: write to project memory or workspace
-    repo = get_git_root(workspace)
-    if repo:
-        project_dir = MEMORY_DIR / "projects" / repo
-        project_dir.mkdir(parents=True, exist_ok=True)
-        return project_dir / "prompt.md"
-
+    # For migrate and handoff: write to workspace root (project-local)
     if workspace:
         return Path(workspace) / "prompt.md"
+
+    # Try git root as workspace
+    repo_path = None
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            repo_path = Path(result.stdout.strip())
+    except Exception:
+        pass
+
+    if repo_path:
+        return repo_path / "prompt.md"
 
     # Fallback: global handoff
     HANDOFF_DIR.mkdir(parents=True, exist_ok=True)

@@ -69,6 +69,53 @@
    └─ update activeContext.md / progress.md
 ```
 
+## Capability Plugin Pattern
+
+A **capability** is a cross-harness behavior delivered through the shared infrastructure. Each capability follows the same structure:
+
+```
+capability/
+├── Shared Script(s)    — Python, lives in .harness/hooks/ or .harness/mcp/
+├── Per-Harness Wiring  — native config that invokes the script (hook JSON, instruction block, etc.)
+├── Manifest Cells      — [[cell]] entries declaring strategy per harness
+└── Skill (optional)    — retrieval-routed instruction that teaches agents when/how to invoke
+```
+
+### Anatomy
+
+| Layer | Purpose | Example (lifecycle) |
+|-------|---------|---------------------|
+| **Script** | Portable logic. No harness-specific imports. Reads stdin JSON, writes stdout. | `session_handoff.py`, `session_resume.py` |
+| **Wiring** | Native integration point per harness. Maps trigger → script invocation. | Claude: `settings.json` Stop hook. Kiro: `.kiro/hooks/*.json`. Pi/opencode: AGENTS.md instruction. |
+| **Manifest** | Declares how the capability reaches each harness (LINK/GENERATE/SKIP). | `[[cell]] artifact="lifecycle"` × 4 harnesses |
+| **Skill** | Optional retrieval target so agents self-discover the behavior. | `continuity-log` SKILL.md references session_handoff.py |
+
+### Design Constraints
+
+1. **Scripts are harness-agnostic.** They consume a JSON payload on stdin and emit structured JSON on stdout. No imports from any harness SDK.
+2. **Wiring is the only harness-specific layer.** If a harness has native hooks, use them (GENERATE into its config). If not, fall back to instruction-driven (GENERATE into AGENTS.md).
+3. **Staleness guard.** When a hook and an agent can both write the same artifact, the hook checks recency before overwriting. A richer agent-written artifact should survive a thin hook invocation.
+4. **Fail-open.** Lifecycle hooks exit 0 on any error. They must never block session start or stop.
+5. **One manifest cell per (artifact, harness) pair.** The cell declares strategy + target + emit description. `install.py` uses this to generate or link.
+
+### Current Capabilities
+
+| Capability | Artifact | Scripts | Harnesses Wired |
+|-----------|----------|---------|-----------------|
+| Spec gate | `policy` + `adapter` | `security_scan.py`, adapter per harness | claude, pi, opencode |
+| Skill routing | `skills_router` | retrieve-skills HTTP server | kiro (MCP), claude (hook-http), pi (ext-http), opencode (MCP, NOT_WIRED) |
+| Session lifecycle | `lifecycle` | `session_handoff.py`, `session_resume.py` | claude, kiro, pi, opencode |
+| Self-review | (inline hook) | `self_review.py` | claude (Stop), kiro (Stop) |
+| Codebase map | (inline hook) | `codebase_map.py` | claude (UserPromptSubmit), kiro (steering) |
+
+### Adding a New Capability
+
+1. Write the script in `.harness/hooks/` or `.harness/mcp/`. Document: purpose, preconditions, failure modes.
+2. Wire each harness using its native mechanism. Document which trigger fires and what stdin/stdout contract applies.
+3. Add `[[cell]]` entries to `manifest.toml` for every harness (including SKIP with reason if inapplicable).
+4. If agents should self-discover the behavior, create or update a skill in `~/.skills/<name>/SKILL.md`.
+5. Run `install.py` to propagate. Verify with conformance test.
+
 ## Configuration Files Per Harness
 
 ### Claude Code (`~/.claude/`)

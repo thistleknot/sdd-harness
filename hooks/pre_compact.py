@@ -36,6 +36,7 @@ def main():
     print(
         json.dumps({
             "hookSpecificOutput": {
+                "hookEventName": "Stop",
                 "additionalContext": f"[pre-compact] Transcript backed up to {backup_path.name}"
             }
         })

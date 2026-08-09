@@ -124,6 +124,7 @@ def main():
     # Inject as additionalContext
     print(json.dumps({
         "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
             "additionalContext": f"[codebase-map] {project_map}"
         }
     }))

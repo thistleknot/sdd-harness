@@ -87,6 +87,7 @@ def main():
 
         print(json.dumps({
             "hookSpecificOutput": {
+                "hookEventName": "Stop",
                 "additionalContext": warning
             }
         }))

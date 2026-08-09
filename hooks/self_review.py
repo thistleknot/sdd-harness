@@ -19,6 +19,10 @@ import sys
 import time
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 # Patterns that indicate incomplete work — anchored regexes, not bare substrings.
 # Each is compiled with IGNORECASE off unless noted.
 INCOMPLETE_PATTERNS = [
@@ -176,6 +180,8 @@ def mark_reported(findings_hash: str) -> None:
 
 
 def main():
+    if disabled():
+        return 0
     payload = {}
     try:
         if not sys.stdin.isatty():

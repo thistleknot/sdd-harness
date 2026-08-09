@@ -26,6 +26,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 
 def find_spec_files(spec_dir: Path) -> list[Path]:
     """Find all spec files in a directory."""
@@ -136,6 +140,8 @@ def convergence_report(spec_dir: Path, code_dir: Path | None = None) -> str:
 
 
 def main():
+    if disabled():
+        return 0
     parser = argparse.ArgumentParser(description="Convergence check: spec vs implementation")
     parser.add_argument("--spec", type=Path, required=True, help="Path to spec directory")
     parser.add_argument("--code", type=Path, default=None, help="Path to code directory (optional)")

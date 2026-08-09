@@ -16,6 +16,10 @@ import sys
 import time
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 # Cache: don't re-inject after first prompt in a session
 SESSION_MARKER = Path(os.environ.get("TEMP", "/tmp")) / ".harness_map_injected"
 MAP_TTL = 300  # regenerate map if older than 5 minutes
@@ -90,6 +94,8 @@ def generate_map(root: Path) -> str:
 
 
 def main():
+    if disabled():
+        return 0
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}

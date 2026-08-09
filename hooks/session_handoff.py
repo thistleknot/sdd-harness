@@ -32,6 +32,10 @@ import sys
 import time
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 MEMORY_DIR = Path(os.path.expanduser("~/memory-bank"))
 HANDOFF_DIR = MEMORY_DIR / "handoffs"
 
@@ -231,6 +235,8 @@ def resolve_output_path(workspace: str | None, mode: str) -> Path:
 
 
 def main():
+    if disabled():
+        return 0
     # Try to read from stdin first (hook mode)
     payload = {}
     if not sys.stdin.isatty():

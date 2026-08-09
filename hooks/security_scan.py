@@ -11,6 +11,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
 
 # Patterns that indicate credential exposure
 SECRET_PATTERNS = [
@@ -92,6 +96,8 @@ def scan_content(content: str, filepath: str) -> list[str]:
 
 
 def main():
+    if disabled():
+        return 0
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}

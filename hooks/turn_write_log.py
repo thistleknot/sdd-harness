@@ -10,10 +10,16 @@ import json
 import sys
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 TURN_LOG = Path(".git/.turn_writes")
 
 
 def main():
+    if disabled():
+        return 0
     payload = {}
     if not sys.stdin.isatty():
         try:

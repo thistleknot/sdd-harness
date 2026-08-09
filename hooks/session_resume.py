@@ -19,6 +19,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 MEMORY_DIR = Path(os.path.expanduser("~/memory-bank"))
 
 
@@ -60,6 +64,8 @@ def find_prompt_md() -> Path | None:
 
 
 def main():
+    if disabled():
+        return 0
     try:
         # Consume stdin if provided (hook payload), but we don't need it
         if not sys.stdin.isatty():

@@ -13,10 +13,16 @@ import sys
 import time
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 BACKUP_DIR = Path(os.path.expanduser("~/memory-bank/compaction-backups"))
 
 
 def main():
+    if disabled():
+        return 0
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}

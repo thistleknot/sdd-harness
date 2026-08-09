@@ -19,6 +19,10 @@ import os
 import sys
 from pathlib import Path
 
+import sys as _ks
+_ks.path.insert(0, str(Path(__file__).parent))
+from _common import disabled
+
 # Extensions that are never testable
 CONFIG_EXTS = {
     ".json", ".toml", ".yaml", ".yml", ".md", ".txt", ".env",
@@ -56,6 +60,8 @@ def should_skip(file_path: str) -> bool:
 
 
 def main():
+    if disabled():
+        return 0
     # Read hook payload from stdin
     payload = {}
     if not sys.stdin.isatty():

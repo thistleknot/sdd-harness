@@ -93,7 +93,8 @@ def scan_content(content: str, filepath: str) -> list[str]:
 
 def main():
     try:
-        payload = json.load(sys.stdin)
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         return 0  # fail-open on bad input
 

@@ -64,7 +64,7 @@ def main():
         # Consume stdin if provided (hook payload), but we don't need it
         if not sys.stdin.isatty():
             try:
-                json.load(sys.stdin)
+                sys.stdin.read()  # consume but discard
             except Exception:
                 pass
 

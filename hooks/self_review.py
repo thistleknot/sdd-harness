@@ -179,7 +179,8 @@ def main():
     payload = {}
     try:
         if not sys.stdin.isatty():
-            payload = json.load(sys.stdin)
+            raw = sys.stdin.read()
+            payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         pass
 

@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Log Turn Writes",
+      "trigger": "PostToolUse",
+      "description": "Log each file written by fs_write/str_replace so the Stop reviewer can batch-diff this turn's changes.",
+      "matcher": "fs_write|str_replace",
+      "action": {
+        "type": "command",
+        "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/turn_write_log.py",
+        "timeout": 3
+      }
+    }
+  ]
+}

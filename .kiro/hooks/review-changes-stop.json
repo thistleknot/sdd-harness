@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Batched Change Review",
+      "trigger": "Stop",
+      "description": "At task boundary, show batched diffs of all files modified this turn and ask user to proceed, revert, or adjust.",
+      "action": {
+        "type": "command",
+        "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/review_changes.py",
+        "timeout": 10
+      }
+    }
+  ]
+}

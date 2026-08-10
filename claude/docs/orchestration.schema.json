@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claude-config://rules/orchestration.schema.json",
+  "title": "Agent Orchestration Schema",
+  "description": "As-is schema of the 3-gate propose/apply pipeline plus a bounded re-plan loop (adopted 2026-07-24, same-day FOURTH revision): Opus-high plan/spec v1 -> orchestrator implements inline -> Gate 1 (Sonnet-medium critic, propose-if-confident) -> Gate 2 (Opus-low, propose) -> Gate 3 (Opus-medium, direct write) -> ladder exhausted -> Opus-high ALWAYS re-plans (v2, NEVER fixes code) -> orchestrator implements v2 -> Opus-medium direct fix if needed (no critic, no Gate 2) -> Opus-high re-plans once more (v3, TERMINAL) -> orchestrator implements v3 -> Opus-medium direct fix if needed -> STOP. Gates 1-2 never apply their own fixes; the orchestrator (already Sonnet-low) applies verbatim and reruns the exact check, avoiding an extra subagent spawn. Corrected same day (revision 4): an earlier draft let opus_planner 'repair OR re-scope' at the terminal step, which the user explicitly rejected — opus_planner must NEVER write or apply code, in any mode, at any round; its only output is a plan/spec, and the re-plan loop is bounded to 2 rounds with a lighter orchestrator+opus_fixer_med retry each round (no Gate 1/2, since the original plan is the more likely defect once the full ladder failed). Sources: CLAUDE.md, AGENTS.md, rules/orchestration.md, agents/*.md, plus live Anthropic pricing (2026-07-24 web search) and the observed runtime environment. Fields are provenance-tagged: [docs] = documented policy, [observed] = runtime state, [priced] = confirmed against live rate card. Doc/runtime disagreements live in 'discrepancies', not silently resolved.",
+  "type": "object",
+  "required": ["orchestrator", "agents", "pipeline", "routing", "escalation", "policies", "context_guardrails", "harness_agents", "model_registry", "pricing", "discrepancies"],
+  "properties": {
+
+    "orchestrator": {
+      "description": "The session model itself — not a spawnable subagent, but the universal fix-executor for Gates 1-2. Source: CLAUDE.md 'Model Hierarchy'.",
+      "type": "object",
+      "properties": {
+        "name": { "const": "session_orchestrator" },
+        "model": {
+          "description": "[docs] pin the role to claude-sonnet-5 at low effort; [observed] set via /model on 2026-07-24 (resolves prior discrepancy D1).",
+          "const": {
+            "documented": { "model": "claude-sonnet-5", "effort": "low" },
+            "observed_current_session": "claude-sonnet-5"
+          }
+        },
+        "responsibilities": {
+          "const": [
+            "route: shortcuts (trivial direct, enumerable direct) vs pipeline (spec-worthy -> opus_planner)",
+            "implement code INLINE from spec — no handoff cost for the common hop",
+            "apply any Gate 1 (sonnet_critic) or Gate 2 (opus_fixer_low) proposed fix VERBATIM, then rerun the exact check the diagnosing agent specified — no subagent spawn for this step",
+            "enforce operating policies: 4-agent cap, timeout convention, agentpacket lifecycle",
+            "sweep stale agentpackets at session end",
+            "context health: compact/clear thresholds",
+            "trivial mechanical one-liners and enumerable edits done directly",
+            "may, at its own discretion, route a FRESH (not-yet-failed) implementation straight to opus_fixer_med when a spec is clearly beyond a first inline attempt — rare, not a formal pipeline stage"
+          ]
+        },
+        "prohibitions": {
+          "const": [
+            "does not design — anything requiring design judgment enters the pipeline at opus_planner",
+            "when applying a Gate 1/2 proposed fix, applies VERBATIM only — no design judgment on how, that would blur the propose/apply split"
+          ]
+        }
+      }
+    },
+
+    "agents": {
+      "description": "Spawnable subagents registered in agents/*.md. Exactly these four. Per-agent 'effort' is set via the supported frontmatter key (verified: low|medium|high|xhigh|max, overrides session effort). Opus backs three distinct effort tiers. opus_fixer_med has two invocation contexts (see its invoke_for) but is still one agent definition, not two.",
+      "type": "object",
+      "required": ["opus_planner", "sonnet_critic", "opus_fixer_low", "opus_fixer_med"],
+      "additionalProperties": false,
+      "properties": {
+        "opus_planner": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-opus-5" },
+            "effort": { "const": "high" },
+            "cost_profile": { "const": "highest" },
+            "role": { "const": "plan/spec author ONLY — never a fixer, in any mode" },
+            "tools": { "const": ["Read", "Grep", "Glob", "Write"] },
+            "invoke_for": {
+              "const": [
+                "spec-worthy work -> plan/spec (v1): requirements with acceptance criteria, explicit scope boundary, module ordering",
+                "ladder exhausted (after ALL THREE gates fail: sonnet_critic/orchestrator-apply, opus_fixer_low/orchestrator-apply, opus_fixer_med direct-write): ALWAYS produces a NEW plan/spec (v2) — never attempts a direct fix, not even as a last resort",
+                "if the v2 retry (orchestrator implements + opus_fixer_med direct-fix-if-needed) also fails: re-plans AGAIN (v3) — this is the TERMINAL round, must say so explicitly"
+              ]
+            },
+            "prohibitions": {
+              "const": [
+                "NEVER writes or applies code, in any mode, at any round — plan/spec artifacts only; a described specific code change (vs. a requirement/constraint) means it has drifted into fixing",
+                "never skips straight to a fix on a first-time failure — invoked only after the original-plan ladder (all three gates) is exhausted",
+                "delivers one recommended plan, never a menu",
+                "bounded to at most 2 re-plan rounds total — no third re-plan; round 2 is explicitly terminal"
+              ]
+            }
+          }
+        },
+        "sonnet_critic": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-sonnet-5" },
+            "effort": { "const": "medium" },
+            "cost_profile": { "const": "medium" },
+            "role": { "const": "Gate 1: verify, run, propose-if-confident — never applies" },
+            "tools": { "const": ["Read", "Bash", "Grep", "Glob"] },
+            "contract": {
+              "const": [
+                "verify against acceptance criteria; a review without a run is not a pass",
+                "records the EXACT rerun command so the orchestrator can reproduce it deterministically after applying any fix",
+                "on failure with a clear root cause: include a concrete, verbatim-applicable proposed fix (exact file, exact change) in the evidence packet",
+                "on failure without a clear root cause: evidence-only packet, no proposed fix — an unconfident proposal wastes an apply+rerun cycle, this is a legitimate outcome not a shortfall",
+                "untestable criterion = fail — it is itself a defect"
+              ]
+            },
+            "note": { "const": "NEVER applies a fix itself, whether or not it proposes one — read-only tools enforce this (no Edit/Write). The orchestrator applies verbatim when a fix is proposed. Escalates to opus_fixer_low either way on failure." }
+          }
+        },
+        "opus_fixer_low": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-opus-5" },
+            "effort": { "const": "low" },
+            "cost_profile": { "const": "medium-high" },
+            "role": { "const": "Gate 2: cross-model diagnose + propose — never applies" },
+            "tools": { "const": ["Read", "Grep", "Glob", "Bash"] },
+            "invoke_for": {
+              "const": [
+                "escalation only: Gate 1 exhausted (no confident proposal, OR orchestrator's apply-and-rerun of the critic's proposal still failed)",
+                "diagnose root cause + propose a concrete, verbatim-applicable fix from a cross-model perspective — the orchestrator applies it, not opus_fixer_low itself"
+              ]
+            },
+            "prohibitions": {
+              "const": [
+                "does not edit files — Read/Grep/Glob/Bash only, propose don't apply (distinct from opus_fixer_med, which writes directly at Gate 3)",
+                "ONE shot — does not iterate; escalation to opus_fixer_med happens above it, not by it retrying"
+              ]
+            }
+          }
+        },
+        "opus_fixer_med": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-opus-5" },
+            "effort": { "const": "medium" },
+            "cost_profile": { "const": "high" },
+            "role": { "const": "direct-write fixer, TWO contexts: Gate 3 (original plan) and post-replan retry" },
+            "tools": { "const": ["Read", "Edit", "Write", "Bash", "Grep", "Glob"] },
+            "invoke_for": {
+              "const": [
+                "Context A (Gate 3, original plan): escalation only, after Gate 2's proposed fix (applied by the orchestrator) also failed — two propose/apply cycles already failed, indirection stops earning its cost. Writes AND applies the fix directly, reruns the check itself, ONE shot. On failure, escalates to opus_planner (which re-plans).",
+                "Context B (post-replan retry): invoked directly after the orchestrator implements a re-planned spec (v2 or v3) — NO critic, NO Gate 2 this round, since the original plan (not a fresh implementation bug) was the more likely defect. Writes and applies directly, ONE shot. On failure in round 1 (v2), escalates back to opus_planner for a second re-plan (v3, terminal); on failure in round 2 (v3), escalates to STOP.",
+                "secondary use, orchestrator's discretion only: direct initial implementation when a spec is clearly beyond a first Sonnet-low pass — not a formal pipeline stage"
+              ]
+            },
+            "prohibitions": {
+              "const": [
+                "never invoked as a first fix attempt on the original plan — Gates 1 and 2 go first there",
+                "never re-plans — recommends opus_planner escalation (which ALWAYS re-plans, never fixes) when the plan itself is the defect"
+              ]
+            }
+          }
+        }
+      }
+    },
+
+    "pipeline": {
+      "description": "The one pipeline every spec-worthy task flows through, including the orchestrator's inline apply/rerun step (not just subagent hops) and the bounded re-plan loop.",
+      "type": "object",
+      "properties": {
+        "stages": {
+          "const": [
+            { "stage": "plan_v1", "owner": "opus_planner [high]", "artifact": "plan/spec: requirements + acceptance criteria + boundary" },
+            { "stage": "implement_v1", "owner": "session_orchestrator (inline) [low]", "artifact": "code, from spec (or delegated to opus_fixer_med at orchestrator's discretion for a spec clearly beyond a first pass)" },
+            { "stage": "gate_1_review", "owner": "sonnet_critic [medium]", "artifact": "run-backed pass/fail; on fail, proposed fix IF confident, else evidence only" },
+            { "stage": "gate_1_apply", "owner": "session_orchestrator (inline) [low]", "artifact": "verbatim-applied fix + rerun of the critic's exact check (skipped if no fix was proposed)", "conditional": true },
+            { "stage": "gate_2_diagnose", "owner": "opus_fixer_low [low]", "artifact": "cross-model diagnosis + proposed fix", "conditional": "only if Gate 1 exhausted" },
+            { "stage": "gate_2_apply", "owner": "session_orchestrator (inline) [low]", "artifact": "verbatim-applied fix + rerun", "conditional": "only if Gate 2 fired" },
+            { "stage": "gate_3_fix", "owner": "opus_fixer_med [medium], Context A", "artifact": "directly written + applied fix, self-verified", "conditional": "only if Gate 2's applied fix failed" },
+            { "stage": "replan_v2", "owner": "opus_planner [high]", "artifact": "NEW plan/spec — never a fix", "conditional": "only if Gate 3 (Context A) failed; ALWAYS a re-plan, never a repair" },
+            { "stage": "implement_v2", "owner": "session_orchestrator (inline) [low]", "artifact": "code, from the v2 spec", "conditional": "only after replan_v2" },
+            { "stage": "replan_retry_fix_v2", "owner": "opus_fixer_med [medium], Context B", "artifact": "directly written + applied fix, self-verified — NO critic, NO Gate 2 this round", "conditional": "only if implement_v2's result fails" },
+            { "stage": "replan_v3", "owner": "opus_planner [high]", "artifact": "NEW plan/spec — TERMINAL round, no re-plan follows this one", "conditional": "only if replan_retry_fix_v2 failed" },
+            { "stage": "implement_v3", "owner": "session_orchestrator (inline) [low]", "artifact": "code, from the v3 spec", "conditional": "only after replan_v3" },
+            { "stage": "replan_retry_fix_v3", "owner": "opus_fixer_med [medium], Context B", "artifact": "directly written + applied fix, self-verified — NO critic, NO Gate 2", "conditional": "only if implement_v3's result fails; failure here is terminal — STOP" }
+          ]
+        }
+      }
+    },
+
+    "routing": {
+      "description": "Ordered decision tree — first matching rule wins. Source: rules/orchestration.md 'Decision Tree'.",
+      "type": "object",
+      "properties": {
+        "rules": {
+          "const": [
+            { "order": 1, "condition": "trivial mechanical one-liner (typo, comment, formatting)", "route": "orchestrator direct; no pipeline" },
+            { "order": 2, "condition": "fully enumerable edits, no design judgment", "route": "orchestrator direct; no subagent" },
+            { "order": 3, "condition": "everything else (anything needing design judgment)", "route": "opus_planner [high] -> orchestrator implement (inline, or opus_fixer_med at orchestrator's discretion) -> sonnet_critic [medium] Gate 1" }
+          ]
+        }
+      }
+    },
+
+    "escalation": {
+      "description": "Three quality gates on the original plan, then a bounded re-plan loop (max 2 rounds) with a lighter retry each round. Gates 1-2 are propose/orchestrator-applies; opus_fixer_med is the sole direct-write agent (both contexts). opus_planner NEVER fixes code in any mode — its only terminal action is producing a new plan. Never skip a gate or round in either direction; the pipeline never loops beyond the 2-round bound.",
+      "type": "object",
+      "properties": {
+        "rungs": {
+          "const": [
+            { "rung": 1, "trigger": "review fails (original plan)", "action": "sonnet_critic [medium] proposes IF confident; orchestrator [low, inline] applies verbatim + reruns the exact check (or skips straight to rung 2 if no confident proposal)" },
+            { "rung": 2, "trigger": "still failing", "action": "opus_fixer_low [low] proposes (cross-model); orchestrator [low, inline] applies verbatim + reruns" },
+            { "rung": 3, "trigger": "still failing", "action": "opus_fixer_med [medium], Context A: writes AND applies directly, ONE shot, no intermediary — reruns itself" },
+            { "rung": 4, "trigger": "original-plan ladder exhausted", "action": "opus_planner [high] ALWAYS re-plans (v2) — NEVER attempts a fix. This is re-plan round 1 of a max-2-round bound." },
+            { "rung": 5, "trigger": "n/a (not a failure trigger)", "action": "orchestrator [low, inline] implements v2 from the new spec" },
+            { "rung": 6, "trigger": "v2 implementation fails", "action": "opus_fixer_med [medium], Context B: writes AND applies directly, ONE shot — NO critic, NO Gate 2 this round (lighter retry; the original plan was the more likely defect)" },
+            { "rung": 7, "trigger": "still failing", "action": "opus_planner [high] re-plans AGAIN (v3) — this is re-plan round 2, EXPLICITLY TERMINAL, must state so" },
+            { "rung": 8, "trigger": "n/a (not a failure trigger)", "action": "orchestrator [low, inline] implements v3 from the new spec" },
+            { "rung": 9, "trigger": "v3 implementation fails", "action": "opus_fixer_med [medium], Context B: writes AND applies directly, ONE shot — NO critic, NO Gate 2" },
+            { "rung": 10, "trigger": "still failing", "action": "STOP — report to user with full evidence trail. NO third re-plan; the bound is hard." }
+          ]
+        },
+        "correction": { "const": "2026-07-24, same-day fourth revision: an earlier draft had opus_planner 'repair OR re-scope' as its terminal action (rungs 4/7 above). The user explicitly rejected this — opus_planner must ALWAYS re-plan, NEVER fix code, in any mode, at any round. The re-plan loop's bound (max 2 rounds) and its lighter retry shape (orchestrator + opus_fixer_med Context B only, no critic, no Gate 2) were specified by the user in the same correction." },
+        "retired": { "const": "fable_planner, opus_decomposer, sonnet_reviewer (fix-capable), sonnet_scribe (retired 2026-07-24 with Fable); sonnet_fixer_med (created and retired within the SAME session, 2026-07-24 — superseded by folding its role into sonnet_critic's propose-if-confident contract plus the orchestrator's inline apply step, once it became clear a same-family diagnosis and its execution don't need separate subagents when the orchestrator already IS the same-family model)" }
+      }
+    },
+
+    "policies": {
+      "description": "Operating policies binding every route. Harness-verified: no settings key caps concurrent subagents, so the cap is orchestrator-enforced policy.",
+      "type": "object",
+      "properties": {
+        "agent_cap": { "const": { "max_active_subagents": 4, "enforcement": "orchestrator policy — queue work rather than exceed" } },
+        "timeout": { "const": { "default_budget_minutes": 5, "clause_location": "stated in every subagent's initial prompt", "override": "subagent declares a higher per-subtask budget up front", "violation": "silence past budget = hung -> orchestrator stops the task" } },
+        "handoffs": {
+          "const": {
+            "principle": "context passing between agents is expensive — avoid; inline work needs no packet",
+            "mechanism": "writer saves agentpacket_<UTCstamp>_<from>-to-<to>.md; consumer reads then DELETES it",
+            "location": "project .agentpackets/ (gitignored) when in a project; ~/.claude/agentpackets/ fallback — local overrides, else inherit",
+            "cleanup": "consumer-deletes-after-read + orchestrator sweep of stale packets at session end",
+            "note": "applying a Gate 1/2 proposed fix is NOT a handoff — it's the orchestrator acting on a subagent's returned text within the same turn, not a packet exchange"
+          }
+        }
+      }
+    },
+
+    "context_guardrails": {
+      "description": "Act before the threshold — never let context saturation cause silent degradation.",
+      "type": "object",
+      "properties": {
+        "compact_at": { "const": { "min_fraction": 0.70, "max_fraction": 0.80, "action": "/compact" } },
+        "clear_at": { "const": { "fraction": 0.90, "action": "/clear, summarize active task state, resume" } }
+      }
+    },
+
+    "harness_agents": {
+      "description": "[observed] Agent types registered in the current harness beyond the four pipeline agents. Available for non-pipeline work (search, planning, review); the operating policies (cap, timeout, packets) still bind them.",
+      "type": "object",
+      "properties": {
+        "available": {
+          "const": [
+            { "name": "general-purpose", "use": "multi-step research, search, complex lookups" },
+            { "name": "Explore", "use": "read-only fan-out codebase search" },
+            { "name": "Plan", "use": "implementation-plan / architecture design" },
+            { "name": "claude", "use": "catch-all default when no specific agent fits" },
+            { "name": "claude-code-guide", "use": "Claude Code / Agent SDK / API questions" },
+            { "name": "code-simplifier:code-simplifier", "use": "behavior-preserving clarity and maintainability refinement" },
+            { "name": "feature-dev:code-architect", "use": "feature architecture blueprints from codebase conventions" },
+            { "name": "feature-dev:code-explorer", "use": "trace execution paths of existing features" },
+            { "name": "feature-dev:code-reviewer", "use": "bug, security, and quality review" },
+            { "name": "statusline-setup", "use": "status line configuration" }
+          ]
+        },
+        "note": { "const": "The @orchestrator/@planner/... roster named in AGENTS.md is aspirational — none of those names are registered. See discrepancies.D2." }
+      }
+    },
+
+    "model_registry": {
+      "description": "[observed] Current model landscape backing the roles, as of 2026-07-24.",
+      "type": "object",
+      "properties": {
+        "models": {
+          "const": {
+            "claude-opus-5": "Claude 5 family; backs opus_planner (high, plan/re-plan ONLY — never fixes), opus_fixer_med (medium, the sole direct-write fixer across both Gate 3 and post-replan contexts), opus_fixer_low (low, Gate 2 propose-only) — one model, three effort tiers",
+            "claude-sonnet-5": "Claude 5 family; documented AND observed orchestrator model (low, and the universal fix-executor for Gates 1-2), backs sonnet_critic (medium, Gate 1)",
+            "claude-fable-5": "retired from the roster 2026-07-24 — previously backed fable_planner and the orchestrator session",
+            "claude-opus-4-8": "retired from the roster 2026-07-24 — superseded by claude-opus-5, previously backed opus_decomposer",
+            "claude-haiku-4-5-20251001": "retired from the roster 2026-07-15"
+          }
+        },
+        "effort_mechanism": { "const": "per-agent 'effort' frontmatter key in agents/*.md (low|medium|high|xhigh|max), overrides session effort — verified against Claude Code docs" }
+      }
+    },
+
+    "pricing": {
+      "description": "[priced, 2026-07-24 web search] Live Anthropic API rates per million tokens, grounding the gate-order rationale. Effort tiers (low/medium/high) do NOT change the per-token rate — only how many reasoning tokens get generated at that rate.",
+      "type": "object",
+      "properties": {
+        "rates_per_million_tokens": {
+          "const": {
+            "claude-sonnet-5_intro_through_2026-08-31": { "input": 2, "output": 10 },
+            "claude-sonnet-5_standard_from_2026-09-01": { "input": 3, "output": 15 },
+            "claude-opus-5": { "input": 5, "output": 25 }
+          }
+        },
+        "opus_vs_sonnet_ratio": { "const": "~2.5x during Sonnet intro pricing, ~1.67x after — not the 5-10x gap of older Claude generations" },
+        "design_implication": { "const": "the 3-gate order optimizes for 'does this tier meaningfully raise the odds of a fix,' not dollar-avoidance — a same-family critique (Gate 1) is a genuinely different, often-sufficient check before paying for a cross-model read (Gate 2), and collapsing the apply step into the orchestrator (no extra spawn) is free regardless of per-token cost" }
+      }
+    },
+
+    "discrepancies": {
+      "description": "Doc-vs-runtime mismatches, surfaced not resolved — a spec/reality disagreement is a defect to resolve explicitly, and resolving these is the user's call.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "const": [
+            {
+              "id": "D1",
+              "status": "resolved 2026-07-24",
+              "observed": "session set to claude-sonnet-5 via /model on 2026-07-24",
+              "documented": "the design pins the orchestrator to Sonnet 5 at low effort",
+              "consequence": "doc and runtime now agree; verify effort is actually 'low' (not just default) if cost drift is suspected"
+            },
+            {
+              "id": "D2",
+              "observed": "harness registers general-purpose, Explore, Plan, claude, claude-code-guide, code-simplifier, feature-dev:*, statusline-setup alongside the four pipeline agents",
+              "documented": "AGENTS.md 'Agent Roster' names @orchestrator, @planner, @designer, @coder, @handyman, @debugger, @explorer, @librarian, @summarizer, @observer",
+              "consequence": "routing must target registered names only; the AGENTS.md roster table is aspirational (its own footnote concedes this)"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

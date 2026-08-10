@@ -42,6 +42,13 @@
    │   ├─ Do: implement (trivial/unambiguous)
    │   └─ Spec: enter planning mode
    │
+   ├─ INTENT EXTRACTION (new)
+   │   ├─ Parse user input into structured intent(s)
+   │   ├─ If confidence < threshold OR ambiguous:
+   │   │   └─ Surface options to user (numbered list)
+   │   ├─ Track as: add_todo("intent: <description>", project="intents")
+   │   └─ Intent hierarchy: intent → spec → task (like epic → feature → story)
+   │
    └─ IF SPEC:
        ├─ PLAN (read-only): research, analyze, produce spec
        ├─ REVIEW: user approves spec
@@ -67,6 +74,81 @@
    ├─ complete_todo(finished items)
    ├─ add_todo(deferred work)
    └─ update activeContext.md / progress.md
+```
+
+## Intent Tracking and Translation
+
+### Thesis
+
+The harness is not a framework for building code — it is a **translation layer**
+between fuzzy user intent and unambiguous machine-executable artifacts. The primary
+operation is: `user_input → structured_intent → artifact (spec | task | steering | code)`.
+
+### Hierarchy (analogous to agile work items)
+
+| Level | Artifact | Prefix | Lifecycle |
+|-------|----------|--------|-----------|
+| **Intent** | todo item | `intent:` | Captured → Clarified → Decomposed → Retired |
+| **Spec** | `.spec/` document | — | Drafted → Reviewed → Approved → Implemented |
+| **Task** | todo item | (none) | Pending → In Progress → Done |
+
+Intents are the **epics** of this system. They express *what the user wants* at the
+goal level, before decomposition into specs and tasks. An intent may spawn multiple
+specs; a spec spawns multiple tasks.
+
+### Mechanics
+
+1. **Extraction:** On every non-trivial user input, parse the underlying intent(s).
+   One user message may carry multiple intents (explicit or implied).
+
+2. **Confidence gating:** If the LLM's interpretation confidence is low OR the
+   input is ambiguous, surface a numbered list of possible interpretations before
+   committing. Never silently pick one when multiple are viable.
+
+3. **Tracking:** Record intents via the existing todo MCP:
+   ```
+   add_todo("intent: <one-line goal statement>", project="intents", workspace_root=...)
+   ```
+   Intents persist across sessions. They are only `complete_todo`'d when all
+   downstream specs/tasks are done, or explicitly retired by the user.
+
+4. **Decomposition:** When an intent is clarified and accepted:
+   - Create spec (if non-trivial) OR
+   - Create tasks directly (if trivial/unambiguous)
+   - Link back: the spec/task description references the parent intent
+
+5. **Translation audit:** On session resume, review open intents:
+   - Is the current work still aligned with the stated intent?
+   - Has scope crept beyond what the intent covers?
+   - Are there orphan tasks with no parent intent?
+
+### Design Constraints
+
+- Intents are **user-facing** — phrased in the user's language, not implementation terms
+- An intent without a confidence score is incomplete
+- Intents are cheap to create, expensive to silently drop
+- The `project="intents"` filter keeps them separable from work-item todos
+- The harness NEVER fabricates an intent the user didn't express (no anticipatory intents)
+
+### Example Flow
+
+```
+User: "I want opencode to behave more consistently over long sessions"
+
+Agent interprets:
+  intent: Reduce coherence drift in opencode over sequential edits
+  confidence: 0.8
+  ambiguity: "consistently" could mean:
+    1. Code quality doesn't degrade (lint, tests, duplication)
+    2. Style/naming stays uniform
+    3. Prior features aren't silently broken
+  → Surface options to user
+
+User picks: "all three, but measure 1 first"
+
+Agent:
+  add_todo("intent: Reduce coherence drift in opencode — measured via code quality metrics", project="intents")
+  → Decomposes into: eval spec, runner script, scorer, 10-edit experiment
 ```
 
 ## Capability Plugin Pattern

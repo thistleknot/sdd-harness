@@ -12,13 +12,17 @@
     "todo": {
       "type": "stdio",
       "command": "c:/users/user/py310/Scripts/python.exe",
-      "args": ["C:/Users/user/.claude/skills/.skills/todo/todo_mcp.py"]
+      "args": ["C:/Users/user/.skills/todo/todo_mcp.py"]
     },
     "data-science-skills": {
       "type": "stdio",
       "command": "c:/users/user/py310/Scripts/python.exe",
-      "args": ["C:/Users/user/.claude/skills/.skills/parallel-rrf-graph-rag-hybrid-cascade-mmr-late-retriever/scripts/mcp_server.py"],
+      "args": ["C:/Users/user/.skills/parallel-rrf-graph-rag-hybrid-cascade-mmr-late-retriever/scripts/mcp_server.py"],
       "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    },
+    "specs": {
+      "type": "http",
+      "url": "http://127.0.0.1:8057/mcp"
     }
   },
   "model_routing": {

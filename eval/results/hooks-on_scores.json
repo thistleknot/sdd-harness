@@ -1,0 +1,345 @@
+{
+  "arm": "hooks-on",
+  "scores": [
+    {
+      "edit": 1,
+      "commit": "55d3952fe6dcf728a6a1a02e2cd860eae864386f",
+      "metrics": {
+        "loc": {
+          "loc": 233,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 9,
+          "failed": 0,
+          "errors": 0,
+          "total": 9,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 21
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 2,
+      "commit": "8e9347a40976ede5f51b3d33fbfac1e9660c6dd3",
+      "metrics": {
+        "loc": {
+          "loc": 330,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 16,
+          "failed": 0,
+          "errors": 0,
+          "total": 16,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 30
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 3,
+      "commit": "52e8d79570e88a686ba36e763cec3f1ea81fa7b6",
+      "metrics": {
+        "loc": {
+          "loc": 381,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 20,
+          "failed": 0,
+          "errors": 0,
+          "total": 20,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 34
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 4,
+      "commit": "a4f7e084f0dfdba8b9ae4ae5938e849e7bccd57d",
+      "metrics": {
+        "loc": {
+          "loc": 391,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 20,
+          "failed": 0,
+          "errors": 0,
+          "total": 20,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 35
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 5,
+      "commit": "d9ccfed092cd71914ed2f509563e424d96caeaf4",
+      "metrics": {
+        "loc": {
+          "loc": 394,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 20,
+          "failed": 0,
+          "errors": 0,
+          "total": 20,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 35
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 6,
+      "commit": "07a7f01cbe23ce2d23568f38187ef7f2e1512581",
+      "metrics": {
+        "loc": {
+          "loc": 404,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 20,
+          "failed": 0,
+          "errors": 0,
+          "total": 20,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 36
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 7,
+      "commit": "b4092d72d9d75a26597cd1736eba45d745650059",
+      "metrics": {
+        "loc": {
+          "loc": 438,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 20,
+          "failed": 0,
+          "errors": 0,
+          "total": 20,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 39
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 8,
+      "commit": "7e374ab68714dfd276e347335676a2689e04105c",
+      "metrics": {
+        "loc": {
+          "loc": 554,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 25,
+          "failed": 0,
+          "errors": 0,
+          "total": 25,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 47
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 9,
+      "commit": "5b792aa7c4cdb6932289f5e509e2eadade2e29f1",
+      "metrics": {
+        "loc": {
+          "loc": 619,
+          "files": 8
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 25,
+          "failed": 0,
+          "errors": 0,
+          "total": 25,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 49
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 10,
+      "commit": "8e392e164ef62b842bcb86be4bc725bfc2b4a19d",
+      "metrics": {
+        "loc": {
+          "loc": 673,
+          "files": 9
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 25,
+          "failed": 0,
+          "errors": 0,
+          "total": 25,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 51
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    }
+  ]
+}

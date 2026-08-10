@@ -23,3 +23,11 @@
 
 - [ ] `#7` Verify LotR catalog page renders correctly
     - docs/reference/lotr-catalog.md exists in nav. 458 PNGs in docs/img/lotr/. Should show each in table with LotR unit name.
+
+## DONE
+
+- [x] `#8` Design full-harness eval: specs MCP vs no-specs
+    - SPEC-full-harness.md written to eval/. Two-arm design: specs-on vs specs-off, same 10 prompts, full MCP enabled, no --pure flag.
+
+- [x] `#9` Build full-harness eval runner
+    - Runner built. Pre-flight passes: 3 HTTP servers healthy, opencode exists, seed + prompts ready. Configs: harness-a.json (specs-on), harness-b.json (specs-off), steering-a.md.

@@ -1,0 +1,367 @@
+{
+  "arm": "hooks-off",
+  "scores": [
+    {
+      "edit": 1,
+      "commit": "08ff1d2579d0a90c3d168e064a5c245504f163c7",
+      "metrics": {
+        "loc": {
+          "loc": 231,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 0,
+          "by_code": {}
+        },
+        "tests": {
+          "passed": 8,
+          "failed": 0,
+          "errors": 0,
+          "total": 8,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 20
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 1.0
+      }
+    },
+    {
+      "edit": 2,
+      "commit": "1ea250cdc9f253c806f22cae5557afae4fe44c3b",
+      "metrics": {
+        "loc": {
+          "loc": 306,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 1,
+          "by_code": {
+            "F401": 1
+          }
+        },
+        "tests": {
+          "passed": 13,
+          "failed": 0,
+          "errors": 0,
+          "total": 13,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 27
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.995
+      }
+    },
+    {
+      "edit": 3,
+      "commit": "b82a449cb8aad0782490c510cf1d7cdf3943ec0d",
+      "metrics": {
+        "loc": {
+          "loc": 358,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 1,
+          "by_code": {
+            "F401": 1
+          }
+        },
+        "tests": {
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "total": 17,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 1,
+          "total_functions": 50
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.965
+      }
+    },
+    {
+      "edit": 4,
+      "commit": "7c95f2e230f9dd9c0707e04194b39fe5d7d8a86a",
+      "metrics": {
+        "loc": {
+          "loc": 367,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 1,
+          "by_code": {
+            "F401": 1
+          }
+        },
+        "tests": {
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "total": 17,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 32
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.995
+      }
+    },
+    {
+      "edit": 5,
+      "commit": "10a2357d72f729f3a582833faf12a152cd4f2651",
+      "metrics": {
+        "loc": {
+          "loc": 414,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 1,
+          "by_code": {
+            "F401": 1
+          }
+        },
+        "tests": {
+          "passed": 21,
+          "failed": 0,
+          "errors": 0,
+          "total": 21,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 37
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.995
+      }
+    },
+    {
+      "edit": 6,
+      "commit": "ff4d26821a649eda07fc95a12256c5e737d0e191",
+      "metrics": {
+        "loc": {
+          "loc": 421,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 1,
+          "by_code": {
+            "F401": 1
+          }
+        },
+        "tests": {
+          "passed": 21,
+          "failed": 0,
+          "errors": 0,
+          "total": 21,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 38
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.995
+      }
+    },
+    {
+      "edit": 7,
+      "commit": "fb57ce77a45d7d8d677a0d5d9ab4e24395f4a039",
+      "metrics": {
+        "loc": {
+          "loc": 460,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 2,
+          "by_code": {
+            "F401": 1,
+            "E402": 1
+          }
+        },
+        "tests": {
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "total": 23,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 42
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.99
+      }
+    },
+    {
+      "edit": 8,
+      "commit": "fbc395a813970c3a44ad42f91a1e2df2163de342",
+      "metrics": {
+        "loc": {
+          "loc": 489,
+          "files": 7
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 2,
+          "by_code": {
+            "F401": 1,
+            "E402": 1
+          }
+        },
+        "tests": {
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "total": 23,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 0,
+          "total_functions": 45
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.99
+      }
+    },
+    {
+      "edit": 9,
+      "commit": "62c6e605581a108819ec071cb840603226243492",
+      "metrics": {
+        "loc": {
+          "loc": 535,
+          "files": 8
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 2,
+          "by_code": {
+            "F401": 1,
+            "E402": 1
+          }
+        },
+        "tests": {
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "total": 23,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 1,
+          "total_functions": 48
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.96
+      }
+    },
+    {
+      "edit": 10,
+      "commit": "06b434e01bb96efe48dc5df537df95da5beebab6",
+      "metrics": {
+        "loc": {
+          "loc": 578,
+          "files": 9
+        },
+        "dead_code": {
+          "dead_code_items": 0,
+          "details": []
+        },
+        "lint": {
+          "lint_issues": 2,
+          "by_code": {
+            "F401": 1,
+            "E402": 1
+          }
+        },
+        "tests": {
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "total": 23,
+          "pass_rate": 1.0
+        },
+        "duplication": {
+          "duplicate_function_bodies": 1,
+          "total_functions": 50
+        },
+        "imports": {
+          "circular_imports": 0,
+          "orphan_modules": []
+        },
+        "composite": 0.96
+      }
+    }
+  ]
+}

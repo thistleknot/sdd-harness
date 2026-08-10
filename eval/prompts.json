@@ -1,0 +1,12 @@
+[
+  "Add a retry_count field to Task and make Worker retry failed tasks up to 3 times before marking them dead. Add a DEAD status to TaskStatus.",
+  "Add a delay method to TaskQueue that moves a task to the back with a scheduled_at timestamp. Worker should skip tasks whose scheduled_at is in the future.",
+  "Implement task priorities: Worker should always process the highest-priority task first (higher number = higher priority). Update TaskQueue.pop to return highest priority pending task.",
+  "Add a cancel method to TaskQueue that marks a task as cancelled by id. Worker should skip cancelled tasks. Add CANCELLED to TaskStatus.",
+  "Add an on_complete callback parameter to Worker.__init__ that fires after each task finishes (success or failure). The callback receives the completed Task.",
+  "Implement a stats() method on TaskQueue returning a dict of counts by status: {pending: N, running: N, done: N, failed: N, dead: N, cancelled: N}.",
+  "Add a max_concurrency parameter to Worker that limits how many tasks process in parallel using asyncio. Convert Worker.run to an async method. Keep process_one sync but add an async run_async method.",
+  "Add JSON serialization: TaskQueue.to_json() returns a JSON string of all tasks, and TaskQueue.from_json(data) class method reconstructs the queue. Handle all Task fields including datetime and enum.",
+  "Add a CLI entry point as taskq/__main__.py so python -m taskq starts a worker. It should read JSON task objects from stdin (one per line) and process them, printing results to stdout.",
+  "Refactor: extract task state transitions into a TaskStateMachine class in a new taskq/state_machine.py. It should define valid transitions and raise on invalid ones. Update Worker to use it."
+]

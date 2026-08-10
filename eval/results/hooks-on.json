@@ -1,0 +1,15 @@
+{
+  "arm": "hooks-on",
+  "edits": [
+    {"edit": 1, "prompt": "Add a retry_count field to Task and make Worker retry failed tasks up to 3 times before marking them dead. Add a DEAD status to TaskStatus.", "success": true, "elapsed_seconds": 180, "commit": "55d3952fe6dcf728a6a1a02e2cd860eae864386f"},
+    {"edit": 2, "prompt": "Add a delay method to TaskQueue that moves a task to the back with a scheduled_at timestamp. Worker should skip tasks whose scheduled_at is in the future.", "success": true, "elapsed_seconds": 180, "commit": "8e9347a40976ede5f51b3d33fbfac1e9660c6dd3"},
+    {"edit": 3, "prompt": "Implement task priorities: Worker should always process the highest-priority task first (higher number = higher priority). Update TaskQueue.pop to return highest priority pending task.", "success": true, "elapsed_seconds": 200, "commit": "52e8d79570e88a686ba36e763cec3f1ea81fa7b6"},
+    {"edit": 4, "prompt": "Add a cancel method to TaskQueue that marks a task as cancelled by id. Worker should skip cancelled tasks. Add CANCELLED to TaskStatus.", "success": true, "elapsed_seconds": 200, "commit": "a4f7e084f0dfdba8b9ae4ae5938e849e7bccd57d"},
+    {"edit": 5, "prompt": "Add an on_complete callback parameter to Worker.__init__ that fires after each task finishes (success or failure). The callback receives the completed Task.", "success": true, "elapsed_seconds": 150, "commit": "d9ccfed092cd71914ed2f509563e424d96caeaf4"},
+    {"edit": 6, "prompt": "Implement a stats() method on TaskQueue returning a dict of counts by status: {pending: N, running: N, done: N, failed: N, dead: N, cancelled: N}.", "success": true, "elapsed_seconds": 120, "commit": "07a7f01cbe23ce2d23568f38187ef7f2e1512581"},
+    {"edit": 7, "prompt": "Add a max_concurrency parameter to Worker that limits how many tasks process in parallel using asyncio. Convert Worker.run to an async method. Keep process_one sync but add an async run_async method.", "success": true, "elapsed_seconds": 200, "commit": "b4092d72d9d75a26597cd1736eba45d745650059"},
+    {"edit": 8, "prompt": "Add JSON serialization: TaskQueue.to_json() returns a JSON string of all tasks, and TaskQueue.from_json(data) class method reconstructs the queue. Handle all Task fields including datetime and enum.", "success": true, "elapsed_seconds": 200, "commit": "7e374ab68714dfd276e347335676a2689e04105c"},
+    {"edit": 9, "prompt": "Add a CLI entry point as taskq/__main__.py so python -m taskq starts a worker. It should read JSON task objects from stdin (one per line) and process them, printing results to stdout.", "success": true, "elapsed_seconds": 180, "commit": "5b792aa7c4cdb6932289f5e509e2eadade2e29f1"},
+    {"edit": 10, "prompt": "Refactor: extract task state transitions into a TaskStateMachine class in a new taskq/state_machine.py. It should define valid transitions and raise on invalid ones. Update Worker to use it.", "success": true, "elapsed_seconds": 200, "commit": "8e392e164ef62b842bcb86be4bc725bfc2b4a19d"}
+  ]
+}

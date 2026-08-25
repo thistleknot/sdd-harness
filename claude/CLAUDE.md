@@ -3,6 +3,8 @@
 Collapsed from ~400 corpus fragments to 13 laws. Target: always-on. Everything
 domain-conditional was spilled to skills (see tail of file).
 
+@~/.harness/constitution.md
+
 ## Cross-harness registry
 
 @AGENTS.md
@@ -115,7 +117,13 @@ flaky stage, and had been scoped to that one stage instead of applied as a defau
 
 Walk backward to the earliest broken link. Fix that. Nothing downstream is worth
 touching, reasoning about, or re-testing until the upstream link is confirmed
-clean.
+clean. No fix without tracing the exact trigger. Test one hypothesis at a time;
+if it fails, remove the speculative patch and restate the evidence before the
+next attempt. One cause that explains all symptoms beats several that each
+explain one — but that is a tie-break among rival explanations, not a cap.
+Multiple causes can coexist. Once the earliest link is fixed, re-check that the
+remaining symptoms are actually gone rather than assuming they were downstream
+of it.
 
 - A persisted artifact existing is not proof the stage that wrote it finished.
 - Check a stage's *complete* output, not the one signal you were staring at.
@@ -138,6 +146,15 @@ It does not count until it runs. Look at layer outputs, not final state.
 - Done means resumed throughput past a stated threshold — not diagnosis.
 
 ## 7. Spec-first
+
+**ENFORCED, not advisory, in any repo containing `.spec/`.** `hooks/spec_gate.py`
+is a PreToolUse hook that DENIES Edit/Write/NotebookEdit until the governing spec
+reaches an approved `implement` phase. Phases are
+`requirements|bugfix -> design -> tasks -> implement`, each requiring an operator
+stamp via `/spec-approve` — a command the model cannot invoke. Repos without
+`.spec/` are untouched; `/spec-init` arms one. Escape hatch: `.spec/BYPASS` or
+`SPEC_GATE=off`. Status: `/spec-status`. Skills: `spec-init`, `spec-new`,
+`spec-next`, `spec-approve`, `spec-status`. Notation comes from skill `spec`.
 
 Order of ops: update spec, then code, then reconcile spec against what shipped.
 
@@ -181,6 +198,14 @@ last resort, not a default.
 - Whole functions, never snippets. One contiguous block per instruction set.
 - No temporal or subjective names: no `_v2`, `_new`, `optimized`, `enhanced`.
 - Remove dead code first, add features second.
+- **Anti-sprawl, both gates, every code task.** Before writing: grep for the incumbent that
+  already does this and extend it; if none, say "no incumbent found" out loud and create.
+  Before handing back: review your own diff for collapse (duplicates, orphaned code,
+  redundant helpers) and report **"Sprawl review: collapsed N / nothing to collapse."**
+  No verdict = not done. Third gate for durable artifacts: current disposition on top,
+  one CURRENT block per topic, superseded material spilled to a dated supporting file with
+  a pointer — so an old answer is never easier to find than the new one.
+  Full protocol: AGENTS.md §Anti-Sprawl.
 - Contracts at interfaces: Require / Guarantee / Maintain / Assert.
 - Critical paths and unit tests fail fast. No try/except with fallbacks there.
 - Build from the last known-good state. Diff against it before claiming a fix.
@@ -241,6 +266,9 @@ Lead with the answer or the uncertainty. Stop when it is delivered.
 - Editing the user's prose: keep the jagged rocks, place them next to the smooth
   ones. Mark what is theirs vs added so the delta is visible.
 - Guidance to writers is designer's intent, not a banned-phrase list.
+- Concerns lead with a fitting idiom that carries the point, then the plain
+  statement. No idiom that fits means say it plainly. Full rule: AGENTS.md
+  § Communication style.
 - Wrong: say so, fix it, move on.
 
 **Verdict-first dispositions.** Findings, tests, comparisons, and trade-offs lead
@@ -304,6 +332,11 @@ Update `activeContext.md` and `progress.md` in whichever layer the change belong
 to, and always update `last_session.md`. Append timestamped entries; never
 overwrite history. Convert relative dates to absolute.
 
+**Captured events.** `~/.claude/hooks/log_event.py` records every lifecycle event to
+`~/memory-bank/events.sqlite3`; `mem dream` distils sessions into `status: candidate`
+memories, and `mem review` is the human gate. Candidates are never injected. This is a
+separate lane from the ≥3-recall promotion below — see skill `memory-bank`.
+
 **Chroma tier.** In Claude Code the surface is the `mem` CLI
 (`~/Documents/dev/skills/memory-index/mem.py`): `mem search` to recall, `mem log`
 for an ephemeral worked-out bit, `mem add` for durable markdown, `mem index` to
@@ -316,6 +349,24 @@ do not call it. Full protocol: skill `memory-bank`.
 **Todos.** Every todo call passes `workspace_root` = `git rev-parse --show-toplevel`.
 Omit it when not inside a repo (falls back to the global db). Call `list_todos` at
 session start; `add_todo` whenever deferred work is identified.
+
+**Session handoff.** When context is getting heavy, the task has a logical breakpoint,
+or the user says "handoff"/"wrap up"/"migrate" — invoke the handoff script to package
+state for cross-session continuity:
+```
+python ~/.harness/hooks/session_handoff.py --mode <migrate|close|handoff> \
+  --workspace <cwd> \
+  --objective "<current objective>" \
+  --state '{"done":[...],"in_progress":[...],"pending":[...],"blocked":[...]}' \
+  --decisions '["settled decision 1","..."]' \
+  --files '["path/to/file1","..."]' \
+  --next-steps '["step 1","step 2"]'
+```
+Modes: **migrate** (reset conversational memory, continue fresh from prompt.md),
+**close** (task done, archive), **handoff** (write prompt.md for next session).
+The Stop hook auto-fires this with --mode handoff, but only writes if no recent
+prompt.md exists (staleness guard: 10-min window). For a *rich* handoff, invoke
+explicitly during conversation with all fields populated.
 
 ---
 

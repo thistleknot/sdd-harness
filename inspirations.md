@@ -325,3 +325,311 @@ The book's `.claude/commands/infinite.md` is a slash command that:
 6. Waves continue until context exhaustion
 
 **Our equivalent:** The orchestrator in AGENTS.md + the agent ladder. But the wave-based parallel execution is something we could adopt for batch operations (e.g., parallel skill store updates, parallel test execution across harnesses).
+
+
+## oh-my-opencode-slim — Multi-Agent OpenCode Plugin
+
+Source: https://github.com/alvinunreal/oh-my-opencode-slim
+
+**What it is:** A TypeScript plugin for OpenCode that turns a single agent into a coordinated team of 7 specialized agents (Orchestrator, Explorer, Oracle, Council, Librarian, Designer, Fixer). Routes each sub-task to the agent best suited for it, balancing quality, speed, and cost. Background orchestration dispatches specialists as parallel tasks.
+
+**Key architectural choices:**
+- Single plugin entry `{ id, server, setup }` — v1 loads `server`, v2 loads `setup`
+- Model routing per-agent with runtime preset switching (`/preset`)
+- Council pattern — run multiple models in parallel, synthesize a single answer
+- Multiplexer integration — agents visible in tmux/zellij panes
+- Skills as permission grants — agent can only activate skills it's been given
+- Background job board with wall-clock timeouts and supervisor
+
+**What we adopted:**
+- The multi-harness plugin pattern (`.claude-plugin/`, `.codex-plugin/`, `.opencode/`, `.pi/`) — used directly in our `~/.harness/plugin/` scaffold
+- The concept of one installer targeting all harnesses simultaneously
+
+**What we already do better:**
+- Our skill retrieval is semantic (ColBERT rerank, margin gate) vs their static skill assignment
+- Our memory has annealing lifecycle vs no cross-session memory
+- Our tool-router collapses tool explosion — they expose all tools raw (they hit 58 too)
+- Our spec gate is machine-enforced; they rely on orchestrator prompt discipline
+
+## Munder Difflin — Hive-Mind Multi-CLI Orchestrator
+
+Source: https://github.com/chaitanyagiri/munder-difflin
+
+**What it is:** An Electron desktop app that wraps multiple agent CLIs (Claude, Codex, OpenCode, Grok, etc.) into a self-coordinating team. Each agent gets memory, a mailbox, and a desk on a 2D office floor. A GOD agent (Michael) routes work while you watch. Pixi.js visualization with avatars walking between stations.
+
+**Key architectural choices:**
+- Terminal plane: real node-pty processes, byte-for-byte authentic
+- Hive: per-agent memory, atomic-file mailboxes, shared blackboard, append-only event log
+- Single-committer git design — avoids index.lock corruption
+- Circuit breaker: steer → constrain → stop ladder for loops/storms/budget
+- Durable cost ledger per agent with real token/cost from transcripts
+- Semantic recall index with condensation (memory doesn't grow forever)
+
+**What to adopt:**
+- **Circuit breaker** — budget/turn cap enforced at harness level. If session exceeds N turns or $X cost, kill and log failure. Not yet implemented in our harness.
+- **Durable cost ledger** — per-dispatch budget tracking. We have usage stats in `.claude.json` but no per-task cost caps.
+
+**What we already do better:**
+- Our dispatch pattern (`type TASK.md | claude -p`) is simpler and headless — no Electron needed
+- Our memory is vector-indexed with annealing vs their flat markdown with condensation
+- Our MEA (Manager-Executor-Auditor) loop is more structured than their GOD-agent-routes-everything pattern
+
+## Specky — 58-Tool SDD MCP Toolkit
+
+Source: https://github.com/paulasilvatech/specky
+
+**What it is:** A CLI toolkit for Spec-Driven Development with 13 agents, 58 MCP tools, 22 prompts, 14 skills, and 16 hooks. Enforces a 10-phase pipeline from init to release with EARS notation validation, cross-artifact analysis, and compliance frameworks. Install via `npm install -g specky-sdd`.
+
+**Key architectural choices:**
+- Signed per-feature phase graphs (full, rapid, emergency execution modes)
+- EARS validator — programmatic regex enforcement of 6 requirement patterns
+- Cross-artifact analysis — automatic alignment checking spec↔design↔tasks
+- Intent drift detection — constitutional principles vs downstream artifacts
+- Use-case contracts — each feature declares lifecycle, workload, mode, capabilities
+- 5 compliance frameworks (HIPAA, SOC2, GDPR, PCI-DSS, ISO 27001)
+- MCP-to-MCP routing — outputs structured JSON for GitHub/Jira/Terraform/Figma MCPs
+
+**What we adopted:**
+- **EARS validator** — ported as `validate_ears` tool in our specs MCP server
+- **Cross-artifact analysis** — ported as `cross_analyze` tool
+- **Intent drift detection** — ported as `check_drift` tool
+
+**What we already do better:**
+- Our tool-router solves the 58-tool explosion they created — they present all tools raw
+- Our memory + skill retrieval is more sophisticated (semantic vs static)
+- Our cross-harness plugin works across 5 targets; they need `--target` per install
+- Our spec_gate is simpler and equally effective (phase enforcement without signed graphs)
+- Our failure-archaeology gate has no equivalent in their system
+
+**What they have that we don't (and may not need):**
+- 5 compliance frameworks (HIPAA/SOC2/GDPR/PCI-DSS/ISO 27001) — useful if you ever need regulatory validation
+- Figma-to-spec conversion — design-first workflow
+- Meeting transcript import (VTT/SRT) — requirements extraction from recordings
+- Turnkey spec assembly — structured builder for EARS requirements
+
+## Agentic Spec-Driven Development (Book)
+
+Source: https://agentic-spec.com/ | https://books.google.com/books/about/Agentic_Spec_Driven_Development.html?id=HW7iEQAAQBAJ
+
+**What it is:** A 12+ chapter book covering the full theory of spec-driven development for agentic systems. Chapters span: understanding ASDD, anatomy of specifications, designing for agents, context engineering, requirements engineering, writing specs that eliminate guesswork, architecting agent workflows, specification frameworks/templates, testing/validation, failure modes, security/governance, optimization/performance tuning, application patterns, and the future of ASDD.
+
+**Key concepts (from ToC):**
+- Specifications as executable artifacts, not documentation
+- EARS notation as the requirement language
+- Failure modes taxonomy: hidden assumptions, context fragmentation, late validation, misaligned expectations, validation gaps, objective drift, multi-agent conflicts
+- Security governance with RBAC, specification-level access, audit trails
+- Optimization: reducing cognitive load, caching strategies, feedback loops, execution time, scalable architectures
+- Agentic applications: AI engineering, finance (RL + analytics), NLP, business process automation, healthcare, customer support, game development
+
+**What to adopt:**
+- The failure modes taxonomy (Ch10) maps directly to our failure-archaeology gate — could formalize the categories
+- Security governance patterns (Ch11) for multi-agent dispatch — we trust Claude with `--dangerously-skip-permissions` which is the opposite of governance
+- The optimization chapter's caching/feedback patterns could inform our tool-router's index
+
+## addyosmani/agent-skills — Production-Grade Lifecycle Skills
+
+Source: https://github.com/addyosmani/agent-skills
+
+**What it is:** 24 skills (23 lifecycle + 1 meta) structured as workflows with verification gates and anti-rationalization tables. Covers the full dev lifecycle: Define → Plan → Build → Verify → Review → Ship. Each skill has steps, checkpoints, exit criteria, and a table of common excuses agents use to skip steps.
+
+**Key architectural choices:**
+- Skills are workflows, not reference docs — steps agents follow, not docs they read
+- Anti-rationalization tables — counters to "I'll add tests later" type excuses
+- Progressive disclosure — SKILL.md is entry point, references load on demand
+- 8 slash commands mapping to lifecycle phases
+- Agent personas (code-reviewer, test-engineer, security-auditor, web-performance-auditor)
+
+**What we adopted (7 skills installed to ~/.skills/):**
+- `interview-me` — requirements extraction via one-question-at-a-time interview
+- `incremental-implementation` — thin vertical slices with feature flags
+- `debugging-and-error-recovery` — five-step triage (reproduce, localize, reduce, fix, guard)
+- `code-review-and-quality` — five-axis review with severity labels
+- `security-and-hardening` — OWASP Top 10, secrets management, auth patterns
+- `doubt-driven-development` — adversarial self-review (CLAIM→EXTRACT→DOUBT→RECONCILE→STOP)
+- `context-engineering` — feeding agents the right information at the right time
+
+**What we already do better:**
+- Our retrieval auto-discovers and injects relevant skills vs their manual `/command` activation
+- Our failure-archaeology gate is more rigorous than their debugging skill
+- Our spec-driven-development steering is machine-enforced vs their skill being advisory
+
+## christophacham/agent-skills-library — 2,600+ Skill Catalog
+
+Source: https://github.com/christophacham/agent-skills-library
+
+**What it is:** The largest open-source collection — 2,622 skills from 48 sources, organized into 34 categories. Bulk aggregation, not curated quality. Categories include: ai-ml (314), automation (806), backend-dev (162), game-dev (200), devops (160), design (149), database (137), security (119), git (105).
+
+**What to adopt:**
+- Cherry-pick from `finance` (3 skills), `data-science` (17), `security` (119) categories as needed
+- Use as a discovery resource when looking for domain-specific skills
+
+**What we already do better:**
+- Quality over quantity — our 174 indexed skills are curated and retrieval-tested
+- Our ColBERT reranking ensures only genuinely relevant skills activate vs their flat catalog
+
+## jasonkneen/kiro — Kiro Community Tools
+
+Source: https://github.com/jasonkneen/kiro
+
+**What it is:** Community-maintained Kiro IDE extensions, tools, and configurations. Reference for Kiro-specific plugin patterns, steering file conventions, and MCP integration approaches.
+
+**Relevance:** Reference for how the Kiro ecosystem structures extensions. Our `.kiro/steering/sdd-harness.md` follows these conventions.
+
+
+## marcelsud/spec-driven-agentic-development — Lightweight SDD Slash Commands
+
+Source: https://github.com/marcelsud/spec-driven-agentic-development
+
+**What it is:** A minimal SDD methodology implemented as Claude Code slash commands. Two commands do the work: `/spec:create [feature]` generates a complete spec (context.md + requirements.md + tasks.md), and `/spec:execute [feature]` implements from the tasks. EARS-formatted requirements, TDD task breakdown. Install via `npx degit` into any project's `.claude/` folder.
+
+**Key architectural choices:**
+- Extremely minimal — 5 slash commands, 3 output files per feature, no MCP server
+- Feature-scoped directory structure: `features/[name]/{context.md, requirements.md, tasks.md}`
+- EARS notation for requirements (same as Specky, same as Kiro)
+- Context + technical decisions separated from requirements
+- TDD task breakdown as the implementation plan
+
+**What's worth noting:**
+- This is the **floor** of SDD — the minimum viable version. Two commands, three files. No enforcement, no memory, no retrieval, no cross-analysis. Pure discipline-based.
+- The `features/` directory convention is clean — one folder per feature with all artifacts co-located. Simpler than Specky's `.specs/NNN-feature/` numbering.
+- The separation of `context.md` (why + constraints + decisions) from `requirements.md` (what) from `tasks.md` (how) is the same three-layer decomposition our specs MCP uses (requirements → decisions → tasks).
+
+**What we already do better:**
+- Machine enforcement (spec_gate denies writes without approved spec) vs their discipline-only approach
+- Cross-session memory and continuity vs their stateless slash commands
+- Semantic skill retrieval vs nothing
+- Cross-artifact analysis and drift detection vs nothing
+- Multi-harness portability vs Claude Code only
+
+**What to adopt:** Nothing mechanically — but the simplicity is instructive. A new user could adopt SDD with just these 5 commands and graduate to our full harness when they hit the limits of discipline-only enforcement. Could inform an "SDD lite" onboarding mode.
+
+
+## Spec Kit Agents — Context-Grounded Agentic Workflows (arXiv:2604.05278)
+
+Source: https://arxiv.org/html/2604.05278v1 | https://github.com/marcelsud/spec-driven-agentic-development
+
+**What it is:** An academic paper (Taghavi & Bhavani, Apr 2026) presenting a multi-agent SDD pipeline that adds **phase-level context-grounding hooks** to Spec Kit. PM and developer roles, state-machine orchestrator, with read-only discovery hooks and post-phase validation hooks. Evaluated on 128 runs across 32 features in 5 repos (FastAPI, Airflow, Dexter, Plausible, Strapi). Achieves 58.2% Pass@1 on SWE-bench Lite with MiniMax-M2.5.
+
+**Key findings:**
+- Context-grounding hooks improve judged quality by **+0.15** on 1-5 composite score (p<0.05)
+- 99.7-100% repository-level test compatibility maintained
+- Validation hooks (+1.71%) outperform discovery hooks (+0.57%) individually; combined is best (+4.27%)
+- Overhead: +1.1 min for simple workflows, +13.2 min for full workflows
+- The problem they solve: **context blindness** — agents produce internally coherent but repository-incompatible artifacts (hallucinated APIs, wrong file paths, architectural violations)
+
+**Key architectural choices:**
+- **Discovery hooks** (pre-phase): read-only probing before each stage — glob, grep, git history — to collect repository evidence. Grounds generation in concrete local context rather than generic priors.
+- **Validation hooks** (post-phase): check intermediate artifacts for structural/referential consistency. File paths exist? Libraries present? Task list feasible? After implementation: run tests + linters.
+- **Tool access control**: PM restricted to read-only analysis. Developer can edit + execute. Discovery hooks read-only. Validation hooks get execution privileges.
+- **Separation of generation from evaluation**: different models for work vs judging (avoids self-evaluation bias)
+- **State machine orchestrator**: Specify → Plan → Tasks → Implement with explicit phase gates
+
+**What maps to our harness:**
+
+| Their concept | Our equivalent | Gap? |
+|---------------|---------------|------|
+| Discovery hooks (pre-phase grounding) | `retrieve_skills` + `search_memory` at session start | We ground in skills/memory but don't probe the repo structure per-phase |
+| Validation hooks (post-phase) | `spec_gate` PreToolUse + verify at Stop | We gate before writes but don't validate intermediate artifacts |
+| PM agent (requirements) | Kiro as Manager | Same role |
+| Developer agent (implementation) | Claude as Executor | Same role |
+| State machine orchestrator | specs MCP phase tracking | Same pattern |
+| Context blindness problem | Our failure-archaeology gate catches this retroactively | They prevent it; we detect and recover |
+
+**What to adopt:**
+- **Pre-phase repository probing** — before each spec/design/task phase, automatically glob + grep the repo for relevant files, conventions, existing APIs. Inject as context. This is the biggest delta vs what we do now. Our agents often hallucinate paths because they don't probe first.
+- **Intermediate artifact validation** — after writing a spec, validate that referenced files/modules actually exist before moving to implementation. Our spec_gate only checks phase, not content validity.
+- **The +0.15 quality lift is modest but real** — and it comes from preventing compounding errors. Each phase that starts grounded propagates less drift downstream. This validates our "spec first" philosophy with hard numbers.
+
+**What we already do better:**
+- Our memory layer provides cross-session grounding (they have none — each run is fresh)
+- Our failure-archaeology gate recovers from context blindness after the fact; theirs prevents it but has no recovery mechanism
+- Our tool-router consolidates tool explosion; they use raw tool access
+- Our dispatch pattern allows real parallelism across repos; theirs is single-feature sequential
+- Our skill retrieval is semantic; their discovery hooks are regex/glob (structural, not semantic)
+
+**Key insight:** The paper provides empirical evidence that our spec-first methodology works — **explicit intermediate artifacts + validation hooks = fewer compounding errors**. The gap in our system is the pre-phase repository probing. Adding a `codebase_map.py` UserPromptSubmit hook that probes repo structure before work begins would close this gap. We partially have this (`codebase_map.py` exists in hooks/) but it's not phase-scoped — it runs once at prompt time, not at each phase transition.
+
+
+## Agent-S: LLM Agentic Workflow to Automate Standard Operating Procedures (arXiv:2503.15520)
+
+Source: https://arxiv.org/html/2503.15520v1
+
+**What it is:** A paper proposing an LLM-based agentic workflow for automating Standard Operating Procedures (SOPs). SOPs are logical step-by-step processes — each step is either a user interaction or an API call, with the logical flow defining navigation. Architecture: three task-specific LLMs + Global Action Repository (GAR) + execution memory + multiple environments (API tools, user interface, external knowledge source).
+
+**Key architectural choices:**
+- SOPs written as **simple logical blocks of text** — the procedure IS the prompt
+- Agent chooses action based on current execution memory + SOP definition
+- Two step types: **user interaction** (ask/interpret/collect) and **status check** (API call + decision)
+- **Fault-tolerant**: dynamically decides to repeat an action or seek input from external knowledge
+- **Global Action Repository (GAR)**: pre-defined actions the agent can invoke (same as our tool registry)
+- Execution memory accumulates observations and feedback to decide next action
+
+**The connection to our harness:**
+- Your **data-science-skills** corpus and **retrieve-skills** system are SOPs. Each skill IS a standard operating procedure for a domain task — "here's how you do XGBoost hyperparameter tuning" or "here's how you run a ColBERT retrieval pipeline." The agent retrieves the relevant SOP and follows it.
+- Your **steering rules** (operating-rules, debugging, feature-lifecycle, etc.) are SOPs for *how to behave* — they define the step-by-step logical flow the agent should follow for debugging, for feature development, for failure recovery.
+- The **discovery hooks** from the Spec Kit Agents paper are SOPs for *how to ground* — probe the repo before each phase.
+- The **skeleton/codemap** idea is the repository's SOP — "here are the conventions, the APIs, the structure. Follow these, don't invent new ones."
+
+**Key insight for us:** Everything in the harness is SOPs at different scales:
+
+| Layer | SOP type | Example |
+|-------|----------|---------|
+| Behavioral | How to think/act | steering rules, constitution |
+| Procedural | How to do a task | skills (spec-driven-development, debugging, etc.) |
+| Domain | How a technique works | data-science-skills corpus |
+| Structural | What exists in the repo | skeleton.md, codebase_map |
+| Policy | What's allowed/blocked | spec_gate, security_scan |
+
+The paper validates that **encoding procedures as retrievable text + giving agents memory + fault tolerance = reliable automation of multi-step workflows**. That's our entire architecture restated as a formal contribution.
+
+**What to adopt:**
+- The **fault-tolerance pattern** (repeat action or seek external knowledge on failure) maps to our failure-archaeology gate — but theirs is more granular (per-step retry vs our per-session recovery). A per-step retry hook could catch errors earlier.
+- The **GAR (Global Action Repository)** concept validates our tool-router design — a registry of all available actions the agent can invoke, retrieved by context.
+
+**What we already do better:**
+- Our skills are semantically retrieved (ColBERT) vs their SOPs being statically selected by intent classification
+- Our memory has annealing lifecycle vs their flat execution memory
+- Our multi-harness portability vs their single-environment (customer care only)
+- Our failure-archaeology does root-cause analysis vs their simple retry logic
+
+
+## Code Skeleton as Structural SOP — Compressed Codebase Representation
+
+Source: Original idea, inspired by code2prompt + Spec Kit Agents discovery hooks + Agent-S GAR pattern
+
+**What it is:** A single-file compressed representation of a codebase containing only: constants, class/function headers, docstrings, and a UML class diagram. No implementation bodies. Serves as a quick index for refactoring, a pre-phase grounding artifact, and a structural SOP ("here's what exists — don't reinvent it").
+
+**Why it matters:**
+- Prevents context blindness (the core failure mode from arXiv:2604.05278) by giving agents the full API surface before they start working
+- Acts as the **structural SOP layer** — "these are the conventions, APIs, and patterns. Follow them."
+- Fits in a single context window where full source code wouldn't
+- Enables refactoring without reading every function body
+- Pairs with the UML class diagram for relationship navigation
+
+**Implementation:** `skeleton_gen.py` — walks a repo, extracts signatures + docstrings + constants via AST, generates Mermaid class diagram from imports/inheritance, outputs `SKELETON.md`. Available as a tool in the specs MCP server and as a standalone script.
+
+**Relationship to other patterns:**
+- Discovery hooks (Spec Kit Agents) → skeleton IS the discovery output, precomputed
+- GAR (Agent-S) → the skeleton is the "repository of existing APIs/functions" the agent can invoke
+- codebase_map.py hook → skeleton is the deeper version (tree + signatures vs tree only)
+- data-science-skills corpus → domain SOPs; skeleton is the project-specific structural SOP
+
+
+## oh-my-opencode-slim — Config-Declared Agent Rosters, Presets, and Councils
+
+Source: `C:\Users\user\.config\opencode\oh-my-opencode-slim\oh-my-opencode-slim.json` (local install; JSONC despite the `.json` extension — comments + trailing commas, so it needs a tolerant parser). Schema: `https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json`.
+
+**What it is:** An entire multi-agent orchestration layer expressed as *one declarative config file* — no per-agent markdown files, no code. 12 agents (`librarian`, `designer`, `handyman`, `pi`, `aider`, `patcher`, `debugger`, `summarizer`, `researcher`, `thinker`, `plan`, `scout`), swappable model presets, and a parallel planning council.
+
+**The transferable ideas:**
+
+- **Dual-prompt agent definitions.** Each agent carries both `prompt` (its own system prompt: *"You are Thinker. Deep Reasoning: Extended chain-of-thought analysis for fundamentally stuck logic problems..."*) and `orchestratorPrompt` (the delegation blurb the *orchestrator* sees: `@thinker\n- Role: Deep Reason...`). This cleanly separates **"who I am"** from **"when to call me."** Our `claude/agents/*.md` files fold both into a single body, which means routing metadata and agent instructions can drift against each other. Splitting them is the same problem skill-routing solves for skills.
+- **Per-role capability allowlists with glob + negation.** Preset roles declare `skills: ["*"]` and `mcps: ["*", "!context7"]` — declarative capability scoping with an exclusion operator. This is directly relevant to our `policy` cell / `harness_policy` hook, which currently expresses scoping imperatively in Python.
+- **Presets as swappable model bundles.** `preset: "ollama"` selects one of several named role→model maps (`ollama`, `ollama-reasoning-orchestrator`), each binding `orchestrator`/`oracle`/`fixer`/`researcher` to a specific model + `variant` (`orchestrator`, `tactical`, `lean`, `heavy`) plus a `displayName`. One key swaps the whole cost/capability ladder. Our opus/sonnet ladder (`opus_planner`, `opus_fixer_med`, `sonnet_critic`) is hardcoded across separate files; a preset key would make the cheap/expensive tradeoff a single-line switch.
+- **Council = deliberately diverse parallel planners.** `council.councillor_execution_mode: "parallel"` runs multiple *independent* planners on different models — an `oracle` ("You are the primary planner... Flag missing context as `ASSUMPTION: <text>`. No prose outside the plan.") alongside a second `gemma` planner ("You are an independent second planner"). Independence is the point: different models produce genuinely different plans, then get reconciled. This validates our orchestration ladder and sharpens it — ours escalates *serially* through tiers; theirs fans out in parallel for diversity.
+- **Bounded context reads as config, not convention.** `sessionManager: { maxSessionsPerAgent: 2, readContextMinLines: 10, readContextMaxFiles: 8 }` — concurrency and per-agent context appetite are *declared* and enforced, not left to prompt discipline. We ask agents to be frugal in prose; they cap it structurally.
+- **`disabled_agents` kill-switch roster.** `["explorer", "explore", "scout"]` — note `scout` is fully defined in `agents` yet disabled, so definitions persist while activation is toggled separately. Cheap opt-out without deleting work.
+
+**Where we're ahead:** their config is ungated — nothing verifies an agent's prompt matches its behaviour, and there's no conformance layer, no spec traceability, no failure archaeology. It's a static wiring file. Ours is spec-driven with gates that can *reject* a change.
+
+**Where we should steal:** the dual-prompt split and the `skills`/`mcps` glob-with-negation allowlist are both strictly better than what we do now, and both are portable across harnesses — which makes them cell-shaped in manifest terms.

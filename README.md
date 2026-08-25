@@ -1,6 +1,51 @@
 # SDD Harness
 
-A cross-harness agentic development environment — spec-driven development, debugging, reasoning, and code quality — that works identically across Claude Code, opencode, and pi. One skill store, one spec workflow, one memory system. The model tier adapts; the behavioral contract doesn't.
+Spec-Driven Development across Claude Code, opencode, and pi. One skill store,
+one spec workflow, one memory system. The model tier adapts; the behavioral
+contract doesn't.
+
+## Mission: What SDD Prevents
+
+SDD is garbage-collection semantics for agentic development. Without it, the
+unreachable set grows monotonically because there is no cross-session GC.
+
+### Sprawl
+
+Orphaned artifacts — whether in code, on disk, or in config — as a result of
+loss of coherence (context drift) across multiple sessions. Gate A (search for
+incumbent) is mark-before-allocate. Gate B (review own diff) is compaction.
+Gate C (current disposition on top) keeps roots findable.
+
+### Decoherence
+
+Progressive degradation of agent behavior, decision quality, and inter-agent
+coherence over extended interaction sequences (arXiv 2601.04170). Decomposed
+into semantic drift (deviation from original intent), coordination drift
+(breakdown of multi-agent consensus), and behavioral drift (unintended
+strategies). A cumulative trajectory-level state, measured by diffing current
+behavior against original intent. The specs DB is the reference trajectory.
+
+### Karp
+
+An anomaly gets an explanation instead of a check, execution continues, and
+because nothing pins the explanation it mutates and grows on each retelling.
+A per-event epistemic failure, invisible from outside the transcript. The
+harness counters this with: verification before claiming done, falsification
+conditions on hypotheses, and the rule that a command exiting without error is
+NOT sufficient evidence of success.
+
+### Phased Execution (QA Enforcement)
+
+Every plan decomposes into dependency phases before execution. Independent work
+within a phase runs in parallel. Phase transitions gate on verified disk-persisted
+artifacts — not memory, not assumptions. Each phase declares what it produced and
+what the next phase consumes. No script exceeds 4 phases; longer pipelines split
+into chained scripts, each independently runnable, testable, and resumable. A
+crash loses zero work. A new session resumes from the last checkpoint. This is the
+structural mechanism that prevents all three failure modes above: upstream
+verification prevents decoherence, artifact manifests prevent sprawl, and disk
+checkpoints prevent Karp (the explanation cannot mutate if the evidence is
+persisted).
 
 ## What This Is
 

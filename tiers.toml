@@ -1,0 +1,137 @@
+# tiers.toml — model policy as data.
+#
+# Companion to manifest.toml. That file answers "which artifacts can this
+# harness hold?" (artifact x harness). This one answers "which brain runs this
+# role here?" (role x harness). Different matrix, same discipline: every cell
+# is an explicit recorded decision.
+#
+# THREE LAYERS, and the whole point is that only the last one is harness-specific:
+#
+#   1. GATES     orchestration.md annotates each gate [high]/[med]/[low].
+#                That is a *demand* -- "this gate needs high-grade reasoning" --
+#                not a model. It is already written and does not change here.
+#   2. TIERS     L1/L2/L3 below. Capability classes, no vendor names.
+#   3. BINDINGS  tier -> concrete model id, one block per harness. The ONLY
+#                place a vendor string is allowed to appear.
+#
+# REASONING IS A SEPARATE AXIS. L1-at-high-effort is not L2. A cheap model
+# thinking hard and an expensive model thinking lightly are different animals,
+# and collapsing them into one ladder is how you end up paying opus prices for
+# sonnet work. Every harness exposes the knob differently (Claude: thinking
+# budget; Codex: reasoning_effort; Gemini: thinkingBudget), so tiers carry the
+# effort symbolically and each adapter owns the translation.
+#
+# MODEL NAMES EXPIRE. Every binding carries `resolved`. The adapter warns when
+# a binding is older than `stale_after_days` rather than silently pinning a
+# dead alias -- same rule as sync-to-claude.ps1's reduction guard: never let
+# stale state overwrite reality without saying so.
+
+schema = 1
+stale_after_days = 90
+
+# ---------------------------------------------------------------- tiers
+
+[tier.L1]
+label       = "worker"
+demand      = "low"        # matches the [low] gate annotation in orchestration.md
+purpose     = "First line of defense: quick coding, verification, orchestration."
+escalates_to = "L2"
+note        = "Also the default orchestrator. Cheap enough to run every turn."
+
+[tier.L2]
+label       = "drafter"
+demand      = "med"
+purpose     = "Drafting from an existing plan; cross-model repair when L1 is exhausted."
+escalates_to = "L3"
+note        = "Reached by escalation, not by default. A second opinion, not a smarter L1."
+
+[tier.L3]
+label       = "planner"
+demand      = "high"
+purpose     = "Planning, architecture, cross-file judgment. Produces specs, never code."
+escalates_to = ""          # terminal: ladder exhausted, pipeline stops
+note        = "Bounded to two re-plan rounds total (orchestration.md)."
+
+# ---------------------------------------------------------------- roles
+#
+# Canonical agents. `tier` picks the brain, `reasoning` picks how hard it
+# thinks. Note fixer_low and fixer_med are the SAME tier at different effort --
+# that distinction is exactly the second axis, and it is why effort cannot be
+# folded into the tier.
+#
+# `name` is what the rendered file is called on disk. The current names encode
+# a vendor ("opus_planner"), which is a lie the moment L3 binds to anything
+# else -- see rename_to.
+
+[role.planner]
+tier      = "L3"
+reasoning = "high"
+gate      = "plan"
+tools     = ["Read", "Grep", "Glob", "Write"]
+name      = "opus_planner"
+rename_to = "planner"
+
+[role.critic]
+tier      = "L1"
+reasoning = "medium"
+gate      = "1"
+tools     = ["Read", "Bash", "Grep", "Glob"]
+name      = "sonnet_critic"
+rename_to = "critic"
+
+[role.fixer_low]
+tier      = "L2"
+reasoning = "low"
+gate      = "2"
+tools     = ["Read", "Grep", "Glob", "Bash"]
+name      = "opus_fixer_low"
+rename_to = "fixer_low"
+
+[role.fixer_med]
+tier      = "L2"
+reasoning = "medium"
+gate      = "3"
+tools     = ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
+name      = "opus_fixer_med"
+rename_to = "fixer_med"
+
+# ---------------------------------------------------------------- bindings
+#
+# One block per harness. `resolved` is the date the ids were last confirmed
+# against the vendor's live model list -- not the date this file was edited.
+
+[binding.claude]
+L1       = "claude-sonnet-5"
+L2       = "claude-opus-5"
+L3       = "claude-opus-5"
+resolved = "2026-08-24"
+effort_key = "effort"                       # frontmatter key this harness reads
+effort_map = { low = "low", medium = "medium", high = "high" }
+note     = "L3 == L2 today. Splitting them (L3 -> a dedicated planning model) is a live proposal, not current state."
+
+[binding.codex]
+L1       = "gpt-5.4"
+L2       = "gpt-5-luna"
+L3       = "gpt-5-solr"
+resolved = "2026-08-24"
+effort_key = "reasoning_effort"
+effort_map = { low = "low", medium = "medium", high = "high" }
+note     = "UNVERIFIED: ids supplied by operator, not confirmed against a live model list."
+
+[binding.gemini]
+L1       = ""
+L2       = ""
+L3       = ""
+resolved = ""
+effort_key = "thinkingBudget"
+effort_map = { low = "1024", medium = "8192", high = "24576" }
+note     = "UNBOUND: numeric thinking budget, not an enum. Adapter must emit ints, not strings."
+
+[binding.opencode]
+L1       = ""
+L2       = ""
+L3       = ""
+resolved = ""
+effort_key = "reasoningEffort"
+effort_map = { low = "low", medium = "medium", high = "high" }
+note     = "UNBOUND: opencode proxies many providers; binding depends on which provider is active."

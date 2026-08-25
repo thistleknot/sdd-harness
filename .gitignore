@@ -11,3 +11,38 @@ chess-deep-q-output.txt
 prompt.txt
 index.db
 manifest.toml
+
+# Secrets — never commit
+.env
+
+# Build artifacts (byacc)
+*.obj
+
+# Git worktrees — must never be committed into the parent repo
+eval/worktrees/
+
+# Vendored third-party benchmark repos
+.benchmarks/
+
+# SQLite sidecars — transient, never commit
+*.db-shm
+*.db-wal
+.todo/todos.db
+
+# Runtime logs / captured process output
+specs/specs-mcp.service.log
+events/
+eval/results/**/*.log
+eval/results/**/*.err
+eval/results/**/*.jsonl
+
+# Local scratch
+.staging/
+__pycache__/
+*.pyc
+
+# Review scratch / one-off notes / retired backups
+slop-review/
+*.retired-bak
+delete claude-md.md
+agentic spec driven development.png

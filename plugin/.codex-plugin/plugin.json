@@ -1,0 +1,42 @@
+{
+  "name": "sdd-harness",
+  "version": "0.1.0",
+  "description": "Spec-Driven Development harness: policy gates, semantic memory, skill retrieval, cross-session continuity, and multi-agent orchestration",
+  "author": {
+    "name": "thistleknot",
+    "url": "https://github.com/thistleknot"
+  },
+  "homepage": "https://github.com/thistleknot/harness",
+  "repository": "https://github.com/thistleknot/harness",
+  "license": "MIT",
+  "keywords": [
+    "sdd",
+    "spec-driven-development",
+    "memory",
+    "skills",
+    "orchestration",
+    "policy-gates",
+    "cross-session",
+    "multi-agent"
+  ],
+  "skills": "./skills/",
+  "hooks": {},
+  "interface": {
+    "displayName": "SDD Harness",
+    "shortDescription": "Spec-driven development with policy gates, semantic memory, and multi-agent orchestration",
+    "longDescription": "The SDD Harness enforces a spec-first methodology: requirements before design, design before code, code before commit. It bundles semantic skill retrieval, vector-indexed memory with annealing, spec-gate policy enforcement, cross-session continuity, and a multi-agent Manager-Executor-Auditor loop. Works across Claude Code, OpenCode, Codex, and Kiro.",
+    "developerName": "thistleknot",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Let's spec out a new feature.",
+      "Resume where we left off last session."
+    ],
+    "websiteURL": "https://github.com/thistleknot/harness",
+    "brandColor": "#6366F1"
+  }
+}

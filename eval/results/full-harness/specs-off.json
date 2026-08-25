@@ -1,0 +1,95 @@
+{
+  "arm": "specs-off",
+  "edits": [
+    {
+      "edit": 1,
+      "prompt": "Add a retry_count field to Task and make Worker retry failed tasks up to 3 times before marking them dead. Add a DEAD status to TaskStatus.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "2cf4b5d78499e5d63356272b8d29d69b02298569",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 2,
+      "prompt": "Add a delay method to TaskQueue that moves a task to the back with a scheduled_at timestamp. Worker should skip tasks whose scheduled_at is in the future.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "8d357f5bc9b302156a4696689d166407bd3e83d9",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 3,
+      "prompt": "Implement task priorities: Worker should always process the highest-priority task first (higher number = higher priority). Update TaskQueue.pop to return highest priority pending task.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "10894afff5d2e663de78591b466830572343babb",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 4,
+      "prompt": "Add a cancel method to TaskQueue that marks a task as cancelled by id. Worker should skip cancelled tasks. Add CANCELLED to TaskStatus.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "91ef408d8164d63fbfde259c03aa897dd5fa9248",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 5,
+      "prompt": "Add an on_complete callback parameter to Worker.__init__ that fires after each task finishes (success or failure). The callback receives the completed Task.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "fa4eb161bfa117e6f3dda9cd52218cf31b02ea9f",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 6,
+      "prompt": "Implement a stats() method on TaskQueue returning a dict of counts by status: {pending: N, running: N, done: N, failed: N, dead: N, cancelled: N}.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "97320b0e88e0f7990f60043e5ba556b845bb6e57",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 7,
+      "prompt": "Add a max_concurrency parameter to Worker that limits how many tasks process in parallel using asyncio. Convert Worker.run to an async method. Keep process_one sync but add an async run_async method.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "52befdea65529e30dc8bf6315e9b751b58ffb986",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 8,
+      "prompt": "Add JSON serialization: TaskQueue.to_json() returns a JSON string of all tasks, and TaskQueue.from_json(data) class method reconstructs the queue. Handle all Task fields including datetime and enum.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "d667b7a44ba2a82b7a521e446469ffe938335a97",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 9,
+      "prompt": "Add a CLI entry point as taskq/__main__.py so python -m taskq starts a worker. It should read JSON task objects from stdin (one per line) and process them, printing results to stdout.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "f519fded45e6e4cd09b6fc33d0e895a9faa0f981",
+      "error": "TIMEOUT",
+      "output_tail": null
+    },
+    {
+      "edit": 10,
+      "prompt": "Refactor: extract task state transitions into a TaskStateMachine class in a new taskq/state_machine.py. It should define valid transitions and raise on invalid ones. Update Worker to use it.",
+      "success": false,
+      "elapsed_seconds": 300,
+      "commit": "e987fd2fb98e8977eeaea8d4a53e9656adca9112",
+      "error": "TIMEOUT",
+      "output_tail": null
+    }
+  ]
+}

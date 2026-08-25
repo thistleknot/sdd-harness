@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Ensure MCP services on session start",
+      "trigger": "SessionStart",
+      "description": "Probes all HTTP MCP services at session start, starts any that are down, reports status. Idempotent — skips healthy services.",
+      "action": {
+        "type": "command",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\user\\.harness\\ensure_services.ps1\"",
+        "timeout": 30
+      }
+    }
+  ]
+}

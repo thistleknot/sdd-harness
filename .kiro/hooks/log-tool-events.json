@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Log tool events to JSONL",
+      "trigger": "PostToolUse",
+      "description": "Appends every tool invocation as a structured JSONL event to .harness/events/tool-events.jsonl. Mechanical ground truth — no interpretation, no LLM, no network. Silent on failure.",
+      "matcher": "str_replace|fs_write|fs_append|execute_pwsh|read_file|read_files|grep_search|file_search|web_fetch|remote_web_search",
+      "action": {
+        "type": "command",
+        "command": "python C:\\Users\\user\\.harness\\scripts\\log_tool_event.py",
+        "timeout": 5
+      }
+    }
+  ]
+}

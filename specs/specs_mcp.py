@@ -129,6 +129,72 @@ def add_canon(claim: str, verdict: str, evidence: str, tags: str = None) -> str:
     return f"Canon #{cid} added: [{verdict.upper()}] {claim}"
 
 
+# ── Failure Registry ────────────────────────────────────────────────────────
+
+@mcp.tool
+def add_failure(approach: str, evidence: str, context: str = None,
+                error_class: str = None, falsifies: str = None,
+                conditions: str = None) -> str:
+    """Record a failed approach. Deduplicates by structural signature.
+
+    approach: what was tried (the technique/method/library/pattern)
+    evidence: what happened (error, outcome, measurements)
+    context: under what conditions (optional — project, environment, constraints)
+    error_class: category of failure (optional — e.g. 'type_error', 'perf_regression', 'incompatible')
+    falsifies: what hypothesis this disproves (optional — ties to the hypothesis system)
+    conditions: when this failure applies (optional — e.g. 'Windows only', 'Python <3.11')
+    """
+    fid = db.add_failure(approach, evidence, context, error_class, falsifies, conditions)
+    _auto_render()
+    return f"Failure #{fid} recorded: {approach}"
+
+
+@mcp.tool
+def check_failures(approach: str) -> str:
+    """Check if an approach matches a known dead end. Use before starting work.
+
+    Returns matching failures if the approach signature has been seen before.
+    Empty result = no known blockers, proceed.
+    """
+    matches = db.check_failures(approach)
+    if not matches:
+        return "No known failures for this approach. Proceed."
+    lines = ["KNOWN DEAD ENDS matching this approach:"]
+    for f in matches:
+        obs = f" (observed {f['observations']}x)" if f['observations'] > 1 else ""
+        lines.append(f"\n#{f['id']}{obs}: {f['approach']}")
+        lines.append(f"  Evidence: {f['evidence']}")
+        if f["conditions"]:
+            lines.append(f"  Conditions: {f['conditions']}")
+        if f["falsifies"]:
+            lines.append(f"  Falsifies: {f['falsifies']}")
+    lines.append("\nDo NOT retry this approach unless conditions have changed.")
+    return "\n".join(lines)
+
+
+@mcp.tool
+def list_failures(status: str = None) -> str:
+    """List recorded failure signatures. status: dead | conditional | revived"""
+    failures = db.list_failures(status)
+    if not failures:
+        return "No failures recorded"
+    lines = []
+    for f in failures:
+        obs = f" (×{f['observations']})" if f['observations'] > 1 else ""
+        lines.append(f"#{f['id']} [{f['status']}]{obs} {f['approach']}")
+        if f.get("error_class"):
+            lines.append(f"    error_class: {f['error_class']}")
+    return "\n".join(lines)
+
+
+@mcp.tool
+def revive_failure(id: int, reason: str) -> str:
+    """Mark a dead-end as revived (conditions changed, approach viable again)."""
+    db.revive_failure(id, reason)
+    _auto_render()
+    return f"Failure #{id} revived: {reason}"
+
+
 # ── Dispositions ────────────────────────────────────────────────────────────
 
 @mcp.tool
@@ -177,7 +243,7 @@ async def health(_: Request) -> JSONResponse:
     return JSONResponse({
         "status": "ok",
         "db": str(DB_PATH),
-        "tables": ["requirements", "decisions", "tasks", "settings", "canon", "dispositions"],
+        "tables": ["requirements", "decisions", "tasks", "settings", "canon", "dispositions", "failures"],
     })
 
 
@@ -191,3 +257,212 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     mcp.run(transport="streamable-http", host="127.0.0.1", port=args.port)
+
+
+# ── Tech Debt ───────────────────────────────────────────────────────────────
+
+@mcp.tool
+def add_tech_debt(title: str, severity: str = "warn", details: str = None) -> str:
+    """Track a tech debt item. severity: info | warn | block"""
+    tid = db.add_task(title, "planned", details=f"[TECH_DEBT:{severity}] {details or ''}")
+    _auto_render()
+    return f"Tech debt #{tid} added: {title} [{severity}]"
+
+
+@mcp.tool
+def list_tech_debt() -> str:
+    """List all tech debt items (tasks tagged TECH_DEBT)."""
+    tasks = db.list_tasks()
+    debt = [t for t in tasks if "TECH_DEBT" in (t.get("details") or "")]
+    if not debt:
+        return "No tech debt tracked"
+    lines = []
+    for t in debt:
+        lines.append(f"#{t['id']} [{t['status']}] {t['title']}")
+    return "\n".join(lines)
+
+
+# ── Hooks ───────────────────────────────────────────────────────────────────
+
+import json
+
+
+@mcp.tool
+def list_hooks(workspace_root: str = None) -> str:
+    """List all agent hooks in .kiro/hooks/."""
+    hooks_dir = Path(workspace_root or HERE.parent) / ".kiro" / "hooks"
+    if not hooks_dir.exists():
+        return "No hooks directory found"
+    hooks = []
+    for f in hooks_dir.glob("*.json"):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            for h in data.get("hooks", []):
+                hooks.append(f"{f.stem}: {h.get('name', '?')} [{h.get('trigger', '?')}]")
+        except Exception:
+            hooks.append(f"{f.stem}: (parse error)")
+    return "\n".join(hooks) if hooks else "No hooks found"
+
+
+@mcp.tool
+def create_hook(hook_id: str, name: str, trigger: str, action_type: str,
+                command: str = None, prompt: str = None, matcher: str = None) -> str:
+    """Create a .kiro/hooks/<hook_id>.json file.
+
+    trigger: PreToolUse | PostToolUse | SessionStart | Stop | PostFileSave | PostFileCreate | PostFileDelete | PostTaskExec
+    action_type: command | agent
+    """
+    hooks_dir = Path(HERE.parent) / ".kiro" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hook_file = hooks_dir / f"{hook_id}.json"
+
+    action = {"type": action_type}
+    if action_type == "command" and command:
+        action["command"] = command
+    elif action_type == "agent" and prompt:
+        action["prompt"] = prompt
+
+    hook_def = {"name": name, "trigger": trigger, "action": action}
+    if matcher:
+        hook_def["matcher"] = matcher
+
+    payload = {"version": "v1", "hooks": [hook_def]}
+    hook_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return f"Hook created: {hook_file}"
+
+
+# ── Steering ────────────────────────────────────────────────────────────────
+
+@mcp.tool
+def list_steering(workspace_root: str = None) -> str:
+    """List all steering files in .kiro/steering/."""
+    steer_dir = Path(workspace_root or HERE.parent) / ".kiro" / "steering"
+    if not steer_dir.exists():
+        return "No steering directory found"
+    files = list(steer_dir.glob("*.md"))
+    if not files:
+        return "No steering files"
+    return "\n".join(f"- {f.name} ({f.stat().st_size} bytes)" for f in sorted(files))
+
+
+@mcp.tool
+def read_steering(filename: str, workspace_root: str = None) -> str:
+    """Read the content of a steering file."""
+    steer_dir = Path(workspace_root or HERE.parent) / ".kiro" / "steering"
+    path = steer_dir / filename
+    if not path.exists():
+        return f"Steering file not found: {filename}"
+    return path.read_text(encoding="utf-8")
+
+
+@mcp.tool
+def write_steering(filename: str, content: str, workspace_root: str = None) -> str:
+    """Create or update a steering file in .kiro/steering/."""
+    steer_dir = Path(workspace_root or HERE.parent) / ".kiro" / "steering"
+    steer_dir.mkdir(parents=True, exist_ok=True)
+    path = steer_dir / filename
+    path.write_text(content, encoding="utf-8")
+    return f"Steering written: {path} ({len(content)} chars)"
+
+
+# ── UML Views ───────────────────────────────────────────────────────────────
+
+@mcp.tool
+def generate_uml(view_type: str = "use_case") -> str:
+    """Generate a Mermaid UML diagram from the traceability graph.
+
+    view_type: use_case | component | class
+    """
+    try:
+        from traceability_graph import TraceabilityGraph
+        from uml_views import UmlViewGenerator
+    except ImportError:
+        return "Error: traceability_graph or uml_views not importable from specs dir"
+
+    graph = TraceabilityGraph(str(DB_PATH))
+    gen = UmlViewGenerator(graph)
+
+    if view_type == "use_case":
+        view = gen.use_case_view()
+    elif view_type == "component":
+        view = gen.component_view()
+    elif view_type == "class":
+        view = gen.class_view()
+    else:
+        graph.close()
+        return f"Unknown view_type: {view_type}. Use: use_case, component, class"
+
+    result = view.mermaid
+    graph.close()
+    return result
+
+
+# ── Traceability Graph ──────────────────────────────────────────────────────
+
+@mcp.tool
+def graph_add_node(node_type: str, node_id: str, label: str = "",
+                   source_hash: str = "") -> str:
+    """Add a node to the traceability graph.
+
+    node_type: intent | requirement | decision | task | code_symbol | test | evidence | anomaly | artifact
+    """
+    try:
+        from traceability_graph import TraceabilityGraph
+    except ImportError:
+        return "Error: traceability_graph not importable"
+    graph = TraceabilityGraph(str(DB_PATH))
+    try:
+        graph.add_node(node_type, node_id, label=label, source_hash=source_hash)
+        graph.close()
+        return f"Node added: {node_id} [{node_type}]"
+    except Exception as e:
+        graph.close()
+        return f"Error: {e}"
+
+
+@mcp.tool
+def graph_add_edge(source_id: str, target_id: str, edge_type: str) -> str:
+    """Add an edge to the traceability graph.
+
+    edge_type: implements | tests | evidences | supersedes | depends_on | derives_from | produces | validates | blocks
+    """
+    try:
+        from traceability_graph import TraceabilityGraph
+    except ImportError:
+        return "Error: traceability_graph not importable"
+    graph = TraceabilityGraph(str(DB_PATH))
+    try:
+        graph.add_edge(source_id, target_id, edge_type)
+        graph.close()
+        return f"Edge added: {source_id} --{edge_type}--> {target_id}"
+    except Exception as e:
+        graph.close()
+        return f"Error: {e}"
+
+
+@mcp.tool
+def graph_impact(node_id: str, max_depth: int = 3) -> str:
+    """Query change-impact: what nodes are affected by a change to node_id."""
+    try:
+        from traceability_graph import TraceabilityGraph
+    except ImportError:
+        return "Error: traceability_graph not importable"
+    graph = TraceabilityGraph(str(DB_PATH))
+    result = graph.change_impact(node_id, max_depth)
+    graph.close()
+    if not result.affected_nodes:
+        return f"No impact from {node_id} (isolated node)"
+    return f"Impact from {node_id}: {len(result.affected_nodes)} affected nodes\n" + "\n".join(f"  - {n}" for n in result.affected_nodes)
+
+
+@mcp.tool
+def graph_stats() -> str:
+    """Return traceability graph statistics."""
+    try:
+        from traceability_graph import TraceabilityGraph
+    except ImportError:
+        return "Error: traceability_graph not importable"
+    graph = TraceabilityGraph(str(DB_PATH))
+    s = graph.stats()
+    graph.close()
+    return f"Nodes: {s['total_nodes']}, Edges: {s['total_edges']}, By type: {s['nodes_by_type']}"

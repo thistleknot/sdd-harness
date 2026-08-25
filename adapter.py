@@ -98,6 +98,61 @@ def sync_kiro(config: dict) -> None:
     print(f"  Kiro: updated {kiro_json} ({len(servers)} servers)")
 
 
+def sync_pi(config: dict) -> None:
+    """Pi inherits Claude Code's MCP config — sync is identical to claude."""
+    # Pi uses the same ~/.claude.json as Claude Code (shared user scope)
+    # Only difference: pi routes through litellm. MCP registration is the same.
+    sync_claude_code(config)
+    print("  pi: shares Claude Code MCP config (no separate file)")
+
+
+def sync_codex(config: dict) -> None:
+    """Write Codex CLI MCP config.
+
+    Codex uses AGENTS.md for steering (same as the skills repo root).
+    MCP config location is TBD; for now write to ~/.codex/mcp.json.
+    """
+    codex_dir = Path.home() / ".codex"
+    codex_dir.mkdir(parents=True, exist_ok=True)
+    codex_json = codex_dir / "mcp.json"
+
+    servers = {}
+    for name, srv in config["mcp_servers"].items():
+        if srv["type"] == "http":
+            servers[name] = {"url": srv["url"]}
+        else:
+            entry = {"command": srv["command"], "args": srv.get("args", [])}
+            if srv.get("env"):
+                entry["env"] = srv["env"]
+            servers[name] = entry
+
+    output = {"mcpServers": servers}
+    codex_json.write_text(json.dumps(output, indent=2), encoding="utf-8")
+    print(f"  Codex: updated {codex_json} ({len(servers)} servers)")
+
+
+def sync_github_copilot(config: dict) -> None:
+    """Write GitHub Copilot MCP config to .copilot/mcp.json in workspace."""
+    # Copilot MCP lives in the workspace, not user home
+    copilot_dir = Path.cwd() / ".copilot"
+    copilot_dir.mkdir(parents=True, exist_ok=True)
+    copilot_json = copilot_dir / "mcp.json"
+
+    servers = {}
+    for name, srv in config["mcp_servers"].items():
+        if srv["type"] == "http":
+            servers[name] = {"type": "http", "url": srv["url"]}
+        else:
+            entry = {"type": "stdio", "command": srv["command"], "args": srv.get("args", [])}
+            if srv.get("env"):
+                entry["env"] = srv["env"]
+            servers[name] = entry
+
+    output = {"mcpServers": servers}
+    copilot_json.write_text(json.dumps(output, indent=2), encoding="utf-8")
+    print(f"  GitHub Copilot: updated {copilot_json} ({len(servers)} servers)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sync harness config to all targets")
     parser.add_argument("--target", choices=["claude", "opencode", "kiro", "all"], default="all")
@@ -110,6 +165,9 @@ def main():
         "claude": sync_claude_code,
         "opencode": sync_opencode,
         "kiro": sync_kiro,
+        "pi": sync_pi,
+        "codex": sync_codex,
+        "copilot": sync_github_copilot,
     }
 
     if args.target == "all":

@@ -1,0 +1,21 @@
+{
+  "name": "sdd-harness",
+  "version": "0.1.0",
+  "description": "Spec-Driven Development harness: policy gates, semantic memory, skill retrieval, cross-session continuity, and multi-agent orchestration",
+  "author": {
+    "name": "thistleknot"
+  },
+  "homepage": "https://github.com/thistleknot/harness",
+  "repository": "https://github.com/thistleknot/harness",
+  "license": "MIT",
+  "keywords": [
+    "sdd",
+    "spec-driven-development",
+    "memory",
+    "skills",
+    "orchestration",
+    "policy-gates",
+    "cross-session",
+    "multi-agent"
+  ]
+}

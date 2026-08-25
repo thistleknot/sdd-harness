@@ -10,9 +10,8 @@
       "url": "http://127.0.0.1:8055/mcp"
     },
     "todo": {
-      "type": "stdio",
-      "command": "c:/users/user/py310/Scripts/python.exe",
-      "args": ["C:/Users/user/.skills/todo/todo_mcp.py"]
+      "type": "http",
+      "url": "http://127.0.0.1:8056/mcp"
     },
     "data-science-skills": {
       "type": "stdio",

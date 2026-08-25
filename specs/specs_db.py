@@ -97,6 +97,23 @@ class SpecsDB:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS failures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                approach TEXT NOT NULL,
+                signature TEXT NOT NULL,
+                context TEXT,
+                error_class TEXT,
+                evidence TEXT NOT NULL,
+                falsifies TEXT,
+                conditions TEXT,
+                status TEXT DEFAULT 'dead' CHECK(status IN ('dead','conditional','revived')),
+                observations INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_failures_signature ON failures(signature);
+            CREATE INDEX IF NOT EXISTS idx_failures_status ON failures(status);
         """)
         self.conn.commit()
 
@@ -184,6 +201,96 @@ class SpecsDB:
         self.conn.commit()
         return cur.lastrowid
 
+    # ── CRUD: failures ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _failure_signature(approach: str) -> str:
+        """Compute a structural signature for an approach.
+
+        Masks identifiers, numbers, and quoted strings (Tracely-inspired)
+        so that the same approach phrased slightly differently still matches.
+        """
+        import hashlib
+        import re
+        text = approach.lower().strip()
+        # Mask hex ids, UUIDs
+        text = re.sub(r'\b[0-9a-f]{8,}\b', '<id>', text)
+        # Mask numbers
+        text = re.sub(r'\b\d+(\.\d+)?\b', '<n>', text)
+        # Mask quoted strings
+        text = re.sub(r"'[^']*'|\"[^\"]*\"", '<*>', text)
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text)
+        return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    def add_failure(self, approach: str, evidence: str, context: str = None,
+                    error_class: str = None, falsifies: str = None,
+                    conditions: str = None) -> int:
+        """Record a failed approach with its structural signature.
+
+        If an approach with the same signature already exists, increments
+        observations instead of creating a duplicate.
+        """
+        now = _now()
+        sig = self._failure_signature(approach)
+
+        # Check for existing failure with same signature
+        existing = self.conn.execute(
+            "SELECT id, observations FROM failures WHERE signature=? AND status='dead'",
+            (sig,)
+        ).fetchone()
+
+        if existing:
+            self.conn.execute(
+                "UPDATE failures SET observations=observations+1, evidence=?, updated_at=? WHERE id=?",
+                (evidence, now, existing["id"])
+            )
+            self.conn.commit()
+            return existing["id"]
+
+        cur = self.conn.execute(
+            "INSERT INTO failures (approach, signature, context, error_class, evidence, falsifies, conditions, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (approach, sig, context, error_class, evidence, falsifies, conditions, now, now),
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def check_failures(self, approach: str, threshold: float = 0.0) -> list[dict]:
+        """Check if an approach matches any known dead-end failures.
+
+        Uses exact signature match. Returns matching failures sorted by
+        observations (most-observed first).
+        """
+        sig = self._failure_signature(approach)
+        rows = self.conn.execute(
+            "SELECT * FROM failures WHERE signature=? AND status='dead' ORDER BY observations DESC",
+            (sig,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_failures(self, status: str = None, limit: int = 20) -> list[dict]:
+        """List recorded failures, optionally filtered by status."""
+        if status:
+            rows = self.conn.execute(
+                "SELECT * FROM failures WHERE status=? ORDER BY observations DESC, updated_at DESC LIMIT ?",
+                (status, limit)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM failures ORDER BY observations DESC, updated_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def revive_failure(self, id: int, reason: str) -> None:
+        """Mark a failure as revived (conditions changed, approach viable again)."""
+        now = _now()
+        self.conn.execute(
+            "UPDATE failures SET status='revived', conditions=?, updated_at=? WHERE id=?",
+            (reason, now, id)
+        )
+        self.conn.commit()
+
     # ── CRUD: dispositions ──────────────────────────────────────────────────
 
     def add_disposition(self, slug: str, title: str, body: str, tags: str = None) -> int:
@@ -201,7 +308,7 @@ class SpecsDB:
     def query_specs(self, type: str = None, status: str = None, query: str = None) -> list[dict]:
         """Search across tables. Returns matching rows with their source table."""
         results = []
-        tables = [type] if type else ["requirements", "decisions", "tasks", "settings", "canon", "dispositions"]
+        tables = [type] if type else ["requirements", "decisions", "tasks", "settings", "canon", "dispositions", "failures"]
 
         for table in tables:
             try:
@@ -219,6 +326,8 @@ class SpecsDB:
 
     # ── Render ──────────────────────────────────────────────────────────────
 
+    _GENERATED_BANNER = "<!-- GENERATED — DO NOT EDIT — source: specs/specs.db -->\n"
+
     def render_all(self, out_dir: str | Path) -> dict[str, int]:
         """Regenerate all markdown files. Returns {filename: row_count}."""
         out = Path(out_dir)
@@ -230,13 +339,14 @@ class SpecsDB:
         stats["tasks.md"] = self._render_tasks(out / "tasks.md")
         stats["settings.md"] = self._render_settings(out / "settings.md")
         stats["canon.md"] = self._render_canon(out / "canon.md")
+        stats["failures.md"] = self._render_failures(out / "failures.md")
         stats.update(self._render_dispositions(out / "dispositions"))
 
         return stats
 
     def _render_requirements(self, path: Path) -> int:
         rows = self.conn.execute("SELECT * FROM requirements ORDER BY priority, id").fetchall()
-        lines = ["# Requirements\n"]
+        lines = [self._GENERATED_BANNER + "# Requirements\n"]
         for r in rows:
             status_mark = {"active": " ", "met": "x", "dropped": "-"}.get(r["status"], " ")
             lines.append(f"- [{status_mark}] **[{r['priority'].upper()}]** {r['title']}")
@@ -247,7 +357,7 @@ class SpecsDB:
 
     def _render_decisions(self, path: Path) -> int:
         rows = self.conn.execute("SELECT * FROM decisions ORDER BY id").fetchall()
-        lines = ["# Design Decisions\n"]
+        lines = [self._GENERATED_BANNER + "# Design Decisions\n"]
         for r in rows:
             lines.append(f"## {r['id']}. {r['title']}\n")
             if r["context"]:
@@ -266,7 +376,7 @@ class SpecsDB:
             "WHEN 'doing' THEN 0 WHEN 'blocked' THEN 1 WHEN 'planned' THEN 2 "
             "WHEN 'deferred' THEN 3 WHEN 'done' THEN 4 WHEN 'deprecated' THEN 5 END, id"
         ).fetchall()
-        lines = ["# Tasks\n"]
+        lines = [self._GENERATED_BANNER + "# Tasks\n"]
 
         current_status = None
         for r in rows:
@@ -291,7 +401,7 @@ class SpecsDB:
 
     def _render_settings(self, path: Path) -> int:
         rows = self.conn.execute("SELECT * FROM settings ORDER BY key").fetchall()
-        lines = ["# Settings\n", "| Key | Value | Citation |", "|-----|-------|----------|"]
+        lines = [self._GENERATED_BANNER + "# Settings\n", "| Key | Value | Citation |", "|-----|-------|----------|"]
         for r in rows:
             citation = r["citation"] or ""
             lines.append(f"| `{r['key']}` | `{r['value']}` | {citation} |")
@@ -301,13 +411,41 @@ class SpecsDB:
 
     def _render_canon(self, path: Path) -> int:
         rows = self.conn.execute("SELECT * FROM canon ORDER BY id").fetchall()
-        lines = ["# Canon (Settled Claims)\n"]
+        lines = [self._GENERATED_BANNER + "# Canon (Settled Claims)\n"]
         for r in rows:
             verdict_icon = {"yes": "YES", "no": "NO", "mixed": "MIXED", "inconclusive": "???"}.get(r["verdict"], r["verdict"])
             lines.append(f"- **{verdict_icon}** — {r['claim']}")
             lines.append(f"  - Evidence: {r['evidence']}")
             if r["tags"]:
                 lines.append(f"  - Tags: {r['tags']}")
+            lines.append("")
+        path.write_text("\n".join(lines), encoding="utf-8")
+        return len(rows)
+
+    def _render_failures(self, path: Path) -> int:
+        rows = self.conn.execute(
+            "SELECT * FROM failures ORDER BY status, observations DESC, updated_at DESC"
+        ).fetchall()
+        lines = [self._GENERATED_BANNER + "# Failure Registry (Dead Ends)\n"]
+        lines.append("Approaches proven dead. Check before pursuing similar ideas.\n")
+
+        current_status = None
+        for r in rows:
+            if r["status"] != current_status:
+                current_status = r["status"]
+                icon = {"dead": "DEAD", "conditional": "CONDITIONAL", "revived": "REVIVED"}
+                lines.append(f"## {icon.get(current_status, current_status.upper())}\n")
+
+            obs = f" (×{r['observations']})" if r['observations'] > 1 else ""
+            lines.append(f"- **#{r['id']}**{obs} {r['approach']}")
+            lines.append(f"  - Evidence: {r['evidence']}")
+            if r["error_class"]:
+                lines.append(f"  - Error class: {r['error_class']}")
+            if r["falsifies"]:
+                lines.append(f"  - Falsifies: {r['falsifies']}")
+            if r["conditions"]:
+                lines.append(f"  - Conditions: {r['conditions']}")
+            lines.append(f"  - Signature: `{r['signature']}`")
             lines.append("")
         path.write_text("\n".join(lines), encoding="utf-8")
         return len(rows)
@@ -324,7 +462,7 @@ class SpecsDB:
 
         for r in rows:
             lines = [
-                f"# {r['title']}\n",
+                self._GENERATED_BANNER + f"# {r['title']}\n",
                 f"**Slug:** `{r['slug']}`",
             ]
             if r["tags"]:

@@ -166,7 +166,7 @@ def copy_core_skills(source_store: Path | None = None) -> int:
     sources = [
         source_store,
         Path.home() / ".claude" / "skills" / ".skills",
-        Path(r"C:\Users\user\Documents\dev\skills"),
+        Path.home() / "Documents" / "dev" / "skills",
         HARNESS_ROOT / "skills",
     ]
 

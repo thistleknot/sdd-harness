@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Phase Boundary Test Coverage Gate",
+      "trigger": "PostTaskExec",
+      "description": "After a spec task completes, check test coverage across the phase's modified files. Generate tests only for uncovered production modules — not per-file, but as a batch across the feature set. Runs the sprawl check to prevent inflation.",
+      "action": {
+        "type": "agent",
+        "prompt": "A spec task just completed. Run the phase-boundary test coverage check:\n\n1. **Sprawl check first** — run `python -m pytest specs/test_sprawl_check.py -v --tb=short` to confirm ratio and totals are within bounds. If any gate fails, DO NOT generate more tests — report the sprawl issue instead.\n\n2. **Identify uncovered modules** — list all production .py files in the workspace that were modified this session but have NO corresponding test file. Only these are candidates.\n\n3. **Generate holistic tests** — for each uncovered module, write ONE focused test file covering the module's behavioral contracts (not per-function). Target: 5-10 tests per module max, testing behaviors not implementations.\n\n4. **Skip if covered** — if every modified production file already has a test companion with passing tests, report \"Coverage adequate — no new tests needed\" and stop.\n\nRules:\n- Never exceed 15 tests per new file\n- Never duplicate intent already tested elsewhere\n- Test behaviors and contracts, not individual functions\n- Run the full suite after generating to confirm no regressions\n- Report: files checked, gaps found, tests added (if any), sprawl check status"
+      }
+    }
+  ]
+}

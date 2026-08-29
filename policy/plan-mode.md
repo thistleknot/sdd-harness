@@ -52,6 +52,24 @@ When plan mode produces a `plan.md`, use this structure:
 - If the repo is NOT spec-armed, plan mode output writes to `plan.md` in the project root (or `.spec/plan.md` if the user arms it later).
 - The spec gate does NOT block writes to `.spec/` artifacts — only source files. So writing the plan itself is always allowed, even in a gated repo.
 
+## Exit → Playbook (the default for multi-task plans)
+
+Persisting the plan answers *where the plan lives*. It does not answer *who executes
+it*, and executing a 9-step plan inline means the session working step 9 still carries
+every artifact of steps 1–8. That is context rot, and it makes the last tasks the worst.
+
+For any plan of **3+ tasks**, `plan.md` becomes `playbook.md` — a ledger of `[TODO]`
+items worked **one task per fresh subagent session**, each running the model ladder
+(fable authors the plan → opus subplans one task → sonnet implements it → opus only
+re-enters on `[BLOCKED]`). The main session holds the ledger and nothing else.
+
+Offered automatically by `~/.claude/hooks/playbook.py` (PostToolUse on `ExitPlanMode`;
+also `--plan` on UserPromptSubmit, which catches plan requests before plan mode is even
+entered). Full protocol and ledger format: `~/.claude/rules/playbook.md`.
+
+Note: a hook cannot switch the session model — no such field exists in the hook output
+contract. The ladder is therefore per-dispatch, not per-session.
+
 ## Why This Matters
 
 Without this policy, plan mode is "think then forget." The agent exits plan mode, loses the structured reasoning, and either re-derives it (wasting tokens) or proceeds without the structure (losing quality). Persisting the plan as the first write solves both failure modes.

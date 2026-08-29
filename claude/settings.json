@@ -25,6 +25,11 @@
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py",
+            "timeout": 10
           }
         ]
       }
@@ -35,6 +40,16 @@
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py",
+            "timeout": 10
           }
         ]
       }
@@ -55,6 +70,26 @@
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          }
+        ]
+      },
+      {
+        "matcher": "^ExitPlanMode$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py --pivot",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/spec_attribution.py",
+            "timeout": 10
           }
         ]
       }

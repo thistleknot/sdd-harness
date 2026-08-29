@@ -120,6 +120,14 @@ def is_test_file(path: str) -> bool:
     return any(ind in lower for ind in ("test_", "_test.", ".test.", ".spec.", "/tests/", "/__tests__/"))
 
 
+# Quoted spans on a code line are DATA, not a leftover note. A file that tracks
+# `[TODO]` markers -- a ledger reader, a linter, this file -- mentions the word as
+# its subject matter and got flagged on every edit, which is how a checker that is
+# wrong every time teaches you to skim past it on the day it is right. A real marker
+# lives in a comment (`# TODO: ...`), which is unquoted and still caught.
+STRING_SPAN_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+
 def scan_file(path: str) -> list[str]:
     """Scan a file for incomplete patterns. Returns list of findings."""
     if is_test_file(path):
@@ -146,8 +154,9 @@ def scan_file(path: str) -> list[str]:
             if not is_code_line(line):
                 continue
 
+            probe = STRING_SPAN_RE.sub("''", line)
             for pattern in INCOMPLETE_PATTERNS:
-                if pattern.search(line):
+                if pattern.search(probe):
                     findings.append(f"  {path}:{i} -> {stripped[:80]}")
                     break
     except OSError:

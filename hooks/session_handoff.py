@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -38,6 +39,93 @@ from _common import disabled
 
 MEMORY_DIR = Path(os.path.expanduser("~/memory-bank"))
 HANDOFF_DIR = MEMORY_DIR / "handoffs"
+
+
+def derive_objective(transcript_path: str | None) -> str:
+    """Recover the operator's stated objective from the session transcript.
+
+    NO GOVERNING SPEC. Basis: operator instruction 2026-09-12 — "when you do the
+    obvious hook I want you to also carry forward the identified users objective
+    intent", after a handoff emitted `## Objective\n[not specified]`. Root cause:
+    the Stop payload Claude Code sends carries no `objective` key, so the merge at
+    `objective = args.objective or payload.get("objective", "")` was always empty
+    in hook mode. It does carry `transcript_path`, which nothing read.
+
+    Returns the first substantive operator turn (the stated objective) and, when the
+    latest turn has moved on, that too — so a resumed session sees both what the work
+    was for and where it had got to. Empty string if nothing usable.
+    """
+    if not transcript_path:
+        return ""
+    try:
+        p = Path(transcript_path)
+        if not p.is_file():
+            return ""
+        turns: list[str] = []
+        with p.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("type") != "user" or rec.get("isMeta"):
+                    continue
+                content = (rec.get("message") or {}).get("content")
+                if isinstance(content, list):
+                    # A list payload carrying tool_result blocks is the harness
+                    # replying to itself, not the operator speaking.
+                    if any(
+                        isinstance(b, dict) and b.get("type") == "tool_result"
+                        for b in content
+                    ):
+                        continue
+                    content = " ".join(
+                        b.get("text", "")
+                        for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                if not isinstance(content, str):
+                    continue
+                text = _strip_injected(content).strip()
+                # Slash-command envelopes and bare hook echoes are not intent.
+                if not text or text.startswith("<command-") or len(text) < 12:
+                    continue
+                turns.append(" ".join(text.split()))
+        if not turns:
+            return ""
+        first = turns[0][:400]
+        if len(turns) > 1 and turns[-1][:400] != first:
+            return f"{first}\n\nLatest focus: {turns[-1][:400]}"
+        return first
+    except Exception:
+        return ""
+
+
+# Envelopes that arrive on a "user" record but are the harness talking to itself:
+# hook injections, slash-command echoes and stdout, and background-task notifications.
+# Verified against real transcripts 2026-09-12 — without these, a handoff objective
+# reads "<local-command-stdout>Goal set: ..." or a raw <task-notification> block.
+_ENVELOPE_TAGS = (
+    "system-reminder",
+    "local-command-stdout",
+    "local-command-caveat",
+    "command-name",
+    "command-message",
+    "command-args",
+    "task-notification",
+)
+_ENVELOPE_RE = re.compile(
+    r"<(" + "|".join(_ENVELOPE_TAGS) + r")\b[^>]*>.*?</\1\s*>|<(?:" + "|".join(_ENVELOPE_TAGS) + r")\b[^>]*>.*",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_injected(text: str) -> str:
+    """Drop harness-injected blocks so only the operator's own words remain."""
+    return _ENVELOPE_RE.sub(" ", text)
 
 
 def get_git_root(cwd: str | None = None) -> str | None:
@@ -219,27 +307,17 @@ def resolve_output_path(workspace: str | None, mode: str) -> Path:
         prefix = f"{repo}-" if repo else ""
         return HANDOFF_DIR / f"{prefix}closed-{timestamp}.md"
 
-    # For migrate and handoff: write to workspace root (project-local)
-    if workspace:
-        return Path(workspace) / "prompt.md"
-
-    # Try git root as workspace
-    repo_path = None
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            repo_path = Path(result.stdout.strip())
-    except Exception:
-        pass
-
-    if repo_path:
-        return repo_path / "prompt.md"
-
-    # Fallback: global handoff
+    # For migrate and handoff: archive to the handoffs dir with a timestamp.
+    #
+    # Deliberately NEVER writes <workspace>/prompt.md. That path is reserved for
+    # hand-authored handoffs and must not be machine-clobbered: this runs as a
+    # Stop hook, so it fires on every session stop and would silently overwrite
+    # a human-written prompt.md within minutes (an age guard only ever delayed
+    # that, it did not prevent it).
+    #
+    # Nothing is lost by redirecting here: session_resume.py already discovers
+    # these via its handoffs/prompt-*.md fallback, so cross-session continuity
+    # is unchanged. Keep this filename shape in sync with that glob.
     HANDOFF_DIR.mkdir(parents=True, exist_ok=True)
     return HANDOFF_DIR / f"prompt-{timestamp}.md"
 
@@ -279,6 +357,11 @@ def main():
     mode = args.mode or payload.get("mode", "handoff")
     workspace = args.workspace or payload.get("workspace") or payload.get("cwd")
     objective = args.objective or payload.get("objective", "")
+    if not objective:
+        # Hook mode: the Stop payload never carries `objective`, so derive it from
+        # the transcript rather than emitting "[not specified]" (CLAUDE.md, "every
+        # handoff carries the objective intent").
+        objective = derive_objective(payload.get("transcript_path"))
     conversation_log = args.conversation_log or payload.get("conversation_log")
 
     # Parse structured fields
@@ -306,23 +389,6 @@ def main():
                 "diff_summary": diff_summary,
                 "recent_commits": recent_commits,
             }
-
-    # Guard: if called as a Stop hook with no substantive content,
-    # don't overwrite a recent prompt.md that the agent already wrote
-    is_empty_payload = not objective and not state and not next_steps
-    if is_empty_payload and mode == "handoff":
-        output_path = resolve_output_path(workspace, mode)
-        if output_path.exists():
-            age_seconds = time.time() - output_path.stat().st_mtime
-            # If written less than 10 minutes ago, skip — richer content is already there
-            if age_seconds < 600:
-                print(json.dumps({
-                    "mode": "handoff",
-                    "path": str(output_path),
-                    "message": f"Skipped: recent prompt.md exists ({age_seconds:.0f}s old)",
-                    "skipped": True,
-                }))
-                return 0
 
     # Build the prompt.md
     content = build_prompt_md(

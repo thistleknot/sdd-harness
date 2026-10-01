@@ -46,3 +46,6 @@ slop-review/
 *.retired-bak
 delete claude-md.md
 agentic spec driven development.png
+
+# scratch: project-local, disposable
+.tmp/

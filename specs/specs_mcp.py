@@ -205,11 +205,47 @@ def add_disposition(slug: str, title: str, body: str, tags: str = None) -> str:
     return f"Disposition #{did} added: {title}"
 
 
+# ── Future directions ───────────────────────────────────────────────────────
+
+@mcp.tool
+def add_future_direction(title: str, rationale: str, trigger: str = None,
+                         scope: str = "harness", tags: str = None) -> str:
+    """Record uncommitted work worth revisiting later.
+
+    NOT a task: a future direction has no owner and no ETA. If it has either, use
+    add_task instead.
+
+    trigger: the condition that would promote this to real work ("revisit when a
+             second repo accumulates entries"). Without one it never gets revisited.
+    scope:   'harness', or 'repo:<name>' for a direction belonging to another project.
+    """
+    fid = db.add_future_direction(title, rationale, trigger, scope, tags)
+    warn = "" if trigger else "  WARNING: no trigger — this will never surface on its own."
+    _auto_render()
+    return f"Future direction #{fid} added: {title}{warn}"
+
+
+@mcp.tool
+def update_future_direction(id: int, title: str = None, rationale: str = None,
+                            trigger: str = None, scope: str = None,
+                            status: str = None, promoted_to: str = None,
+                            tags: str = None) -> str:
+    """Transition a future direction. status: open | promoted | dropped
+
+    When promoting, pass promoted_to with the task or requirement that now owns it
+    (e.g. 'task #59'). Directions are transitioned, never deleted.
+    """
+    db.update_future_direction(id, title=title, rationale=rationale, trigger=trigger,
+                               scope=scope, status=status, promoted_to=promoted_to, tags=tags)
+    _auto_render()
+    return f"Future direction #{id} updated"
+
+
 # ── Query ───────────────────────────────────────────────────────────────────
 
 @mcp.tool
 def query_specs(type: str = None, status: str = None, query: str = None) -> str:
-    """Search across all spec tables. Filter by type (requirements/decisions/tasks/settings/canon/dispositions), status, or free text."""
+    """Search across all spec tables. Filter by type (requirements/decisions/tasks/settings/canon/dispositions/failures/future_directions), status, or free text."""
     results = db.query_specs(type, status, query)
     if not results:
         return "No results found"

@@ -114,6 +114,21 @@ class SpecsDB:
             );
             CREATE INDEX IF NOT EXISTS idx_failures_signature ON failures(signature);
             CREATE INDEX IF NOT EXISTS idx_failures_status ON failures(status);
+
+            CREATE TABLE IF NOT EXISTS future_directions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                trigger TEXT,
+                scope TEXT NOT NULL DEFAULT 'harness',
+                status TEXT DEFAULT 'open' CHECK(status IN ('open','promoted','dropped')),
+                promoted_to TEXT,
+                tags TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_future_scope ON future_directions(scope);
+            CREATE INDEX IF NOT EXISTS idx_future_status ON future_directions(status);
         """)
         self.conn.commit()
 
@@ -303,12 +318,41 @@ class SpecsDB:
         self.conn.commit()
         return cur.lastrowid
 
+    # ── CRUD: future directions ────────────────────────────────────────
+
+    def add_future_direction(self, title: str, rationale: str, trigger: str = None,
+                             scope: str = "harness", tags: str = None) -> int:
+        """Record uncommitted work worth revisiting. Not a task — no owner, no ETA."""
+        now = _now()
+        cur = self.conn.execute(
+            "INSERT INTO future_directions (title, rationale, trigger, scope, tags, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+            (title, rationale, trigger, scope, tags, now, now),
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def update_future_direction(self, id: int, **kwargs) -> None:
+        """Transition a direction. status: open | promoted | dropped
+
+        Promoting sets promoted_to — the task or requirement that now owns the work.
+        """
+        fields = {k: v for k, v in kwargs.items() if v is not None and k in
+                  ("title", "rationale", "trigger", "scope", "status", "promoted_to", "tags")}
+        if not fields:
+            return
+        sets = ", ".join(f"{k}=?" for k in fields)
+        self.conn.execute(
+            f"UPDATE future_directions SET {sets}, updated_at=? WHERE id=?",
+            (*fields.values(), _now(), id),
+        )
+        self.conn.commit()
+
     # ── Query ───────────────────────────────────────────────────────────────
 
     def query_specs(self, type: str = None, status: str = None, query: str = None) -> list[dict]:
         """Search across tables. Returns matching rows with their source table."""
         results = []
-        tables = [type] if type else ["requirements", "decisions", "tasks", "settings", "canon", "dispositions", "failures"]
+        tables = [type] if type else ["requirements", "decisions", "tasks", "settings", "canon", "dispositions", "failures", "future_directions"]
 
         for table in tables:
             try:
@@ -340,6 +384,7 @@ class SpecsDB:
         stats["settings.md"] = self._render_settings(out / "settings.md")
         stats["canon.md"] = self._render_canon(out / "canon.md")
         stats["failures.md"] = self._render_failures(out / "failures.md")
+        stats["future_directions.md"] = self._render_future_directions(out / "future_directions.md")
         stats.update(self._render_dispositions(out / "dispositions"))
 
         return stats
@@ -446,6 +491,41 @@ class SpecsDB:
             if r["conditions"]:
                 lines.append(f"  - Conditions: {r['conditions']}")
             lines.append(f"  - Signature: `{r['signature']}`")
+            lines.append("")
+        path.write_text("\n".join(lines), encoding="utf-8")
+        return len(rows)
+
+    def _render_future_directions(self, path: Path) -> int:
+        rows = self.conn.execute(
+            "SELECT * FROM future_directions ORDER BY status, scope, id"
+        ).fetchall()
+        lines = [self._GENERATED_BANNER + "# Future Directions (Uncommitted)\n"]
+        lines.append(
+            "Work that MIGHT be worth doing. Nobody owns these and none is scheduled — "
+            "that is what separates a direction from a `planned` task in tasks.md.\n"
+        )
+        lines.append(
+            "Each carries the **trigger** that would promote it. A direction with no "
+            "trigger never gets revisited, because nothing tells you to look.\n"
+        )
+
+        current = None
+        for r in rows:
+            key = (r["status"], r["scope"])
+            if key != current:
+                current = key
+                lines.append(f"## {r['status'].upper()} — {r['scope']}\n")
+
+            lines.append(f"- **#{r['id']}** {r['title']}")
+            lines.append(f"  - Why: {r['rationale']}")
+            if r["trigger"]:
+                lines.append(f"  - Revisit when: {r['trigger']}")
+            else:
+                lines.append("  - Revisit when: **NO TRIGGER — this is a wish, not a direction**")
+            if r["promoted_to"]:
+                lines.append(f"  - Promoted to: {r['promoted_to']}")
+            if r["tags"]:
+                lines.append(f"  - Tags: {r['tags']}")
             lines.append("")
         path.write_text("\n".join(lines), encoding="utf-8")
         return len(rows)

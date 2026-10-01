@@ -23,6 +23,18 @@ from _common import disabled
 # Cache: don't re-inject after first prompt in a session
 SESSION_MARKER = Path(os.environ.get("TEMP", "/tmp")) / ".harness_map_injected"
 MAP_TTL = 300  # regenerate map if older than 5 minutes
+COUNT_CAP = 1000  # stop counting a dir here; an uncapped walk of 80k files blew the 5s hook timeout
+
+
+def count_files(top: Path, skip: set[str]) -> int:
+    """Count files under top, pruning skip dirs, stopping at COUNT_CAP."""
+    count = 0
+    for _, dirnames, filenames in os.walk(top):
+        dirnames[:] = [d for d in dirnames if d not in skip]
+        count += len(filenames)
+        if count >= COUNT_CAP:
+            return COUNT_CAP
+    return count
 
 
 def get_git_root() -> Path | None:
@@ -74,9 +86,9 @@ def generate_map(root: Path) -> str:
         if item.name in skip:
             continue
         if item.is_dir():
-            # Count files in dir
-            count = sum(1 for _ in item.rglob("*") if _.is_file() and not any(s in str(_) for s in skip))
-            dirs.append(f"  {item.name}/ ({count} files)")
+            count = count_files(item, skip)
+            label = f"{COUNT_CAP}+" if count >= COUNT_CAP else str(count)
+            dirs.append(f"  {item.name}/ ({label} files)")
         else:
             files.append(f"  {item.name}")
 

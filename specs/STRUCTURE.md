@@ -15,6 +15,8 @@ specs/
 ├── tasks.md              # current plan — doing / done / blocked / next
 ├── settings.md           # hyperparameter anchors with provenance citations
 ├── canon.md              # settled claims (findings + do-not-retry, verdict-first)
+├── failures.md           # dead approaches — check before pursuing a similar idea
+├── future_directions.md  # uncommitted work worth revisiting, each with its trigger
 └── dispositions/         # per-experiment detailed writeups
     └── <slug>.md         # evidence, samples, root cause — too long for canon
 ```
@@ -28,7 +30,29 @@ specs/
 | `tasks.md` | `tasks` table | Plan.md equivalent: status, owner, ETA, blockers |
 | `settings.md` | `settings` table | Key-value with citation/provenance per entry |
 | `canon.md` | `canon` table | Verdict-first: claim → YES/NO → discriminating evidence |
+| `failures.md` | `failures` table | Dead ends: approach → evidence → what it falsifies |
+| `future_directions.md` | `future_directions` table | Uncommitted: title → why → the trigger that would promote it |
 | `dispositions/*.md` | `dispositions` table | Long-form experiment writeups with structured metadata |
+
+### Directions vs tasks — the discriminator
+
+A **future direction** is work nobody has committed to: no owner, no ETA, may never
+happen. A **`planned` task** is committed and merely unstarted. If it has an owner or
+a date, it belongs in `tasks.md`, not here.
+
+Every direction carries a `trigger` — the condition that would turn it into real work
+("revisit when a second repo accumulates entries"). A direction without one never gets
+revisited, because nothing ever tells you to look; the renderer flags trigger-less rows
+as wishes. Same law as a playbook task with no `_Files:`.
+
+`scope` names the project an entry belongs to: `harness`, or `repo:<name>`. Individual
+repos keep their own hand-written `.specs/future-directions.md` — the specs server
+renders one tree only (see `design.md`, "Repos get a hand-written
+.specs/future-directions.md"). The `scope` column is the seam that makes per-repo DB
+resolution a later migration rather than a rewrite.
+
+Directions are transitioned, never deleted: `open` → `promoted` (with `promoted_to`
+pointing at the task or requirement that now owns it) or `dropped`.
 
 ## Statuses (tasks)
 
@@ -55,6 +79,9 @@ Any → `deprecated` (superseded, with pointer to replacement)
 | `add_setting(key, value, citation)` | Record hyperparameter anchor |
 | `add_canon(claim, verdict, evidence)` | Record settled finding |
 | `add_disposition(slug, title, body, tags)` | Record experiment writeup |
+| `add_failure(approach, evidence, ...)` | Record a dead end |
+| `add_future_direction(title, rationale, trigger, scope, tags)` | Record uncommitted work worth revisiting |
+| `update_future_direction(id, status, promoted_to, ...)` | Promote or drop a direction |
 | `query_specs(type, status, query)` | Search across all tables |
 | `list_tasks(status)` | Filtered task view |
 | `render()` | Force re-render all markdown |

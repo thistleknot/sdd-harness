@@ -37,9 +37,11 @@ if (-not (Test-Path $dst)) { Write-Host "FATAL: live tree not found: $dst" -Fore
 if ($Push -and $Pull)      { Write-Host "FATAL: -Push and -Pull are mutually exclusive" -ForegroundColor Red; exit 1 }
 if (-not ($Push -or $Pull -or $Install)) { $DryRun = $true }
 
-# Files that carry reductions. Pushing the vault over a newer live copy of these
-# re-inflates the system prompt, so it requires an explicit override.
-$reduced = @("CLAUDE.md", "AGENTS.md", "SOUL.md")
+# Reduction protection applies to EVERY synced file, not a named list. The three
+# root instruction files were the original motivation, but agents/rules/docs/hooks
+# go through the same slop cuts and had no guard at all -- a -Push would silently
+# re-inflate a rule or hook that had just been trimmed. "Newer and smaller" is the
+# signal, and it is not specific to CLAUDE.md.
 
 $script:changed = 0
 $script:same    = 0
@@ -56,12 +58,13 @@ function Sync-One {
         }
     }
 
-    # guard: never let a bigger, older file overwrite a smaller, newer one
-    if ($Rel -in $reduced -and (Test-Path $To)) {
+    # guard: never let a bigger, older file overwrite a smaller, newer one.
+    # Applies to every synced file in every direction.
+    if (Test-Path $To) {
         $f = Get-Item $From; $t = Get-Item $To
         if ($t.LastWriteTime -gt $f.LastWriteTime -and $t.Length -lt $f.Length) {
             $delta = $f.Length - $t.Length
-            Write-Host ("  HOLD   {0}  (live is newer and {1}b smaller - looks like a reduction)" -f $Rel, $delta) -ForegroundColor Magenta
+            Write-Host ("  HOLD   {0}  (destination is newer and {1}b smaller - looks like a reduction)" -f $Rel, $delta) -ForegroundColor Magenta
             $script:held++
             return
         }
@@ -138,10 +141,56 @@ foreach ($d in @("agents", "rules", "docs", "hooks")) {
 
 # settings.json is a merge target: the manifest points four cells at it
 # (adapter, lifecycle, test_gen, skills_router). A flat copy drops whatever
-# setup.py merged in later, so it is never copied here.
+# setup.py merged in later, so it is never COPIED.
+#
+# But "unsafe to copy" was previously treated as "never sync", which left live
+# settings with no route back to the vault: -Push skips it and -Install only runs
+# vault -> live. Observed 2026-08-31: live 6.6 KB vs vault 3.8 KB. So -Pull now
+# MERGES live keys into the vault copy -- live wins on conflicts, vault-only keys
+# survive, arrays are replaced wholesale (deep-merging hook arrays is worse than
+# taking the newer one).
 Write-Host ""
 Write-Host "=== settings.json ==="
-Write-Host "  skipped (merge target - use -Install)" -ForegroundColor DarkGray
+
+function Merge-Json {
+    param($Base, $Overlay)
+    if ($null -eq $Overlay) { return $Base }
+    if ($Overlay -isnot [psobject] -or $Overlay -is [array]) { return $Overlay }
+    if ($null -eq $Base -or $Base -isnot [psobject] -or $Base -is [array]) { return $Overlay }
+    $out = [ordered]@{}
+    foreach ($p in $Base.PSObject.Properties)    { $out[$p.Name] = $p.Value }
+    foreach ($p in $Overlay.PSObject.Properties) {
+        $out[$p.Name] = if ($out.Contains($p.Name)) { Merge-Json -Base $out[$p.Name] -Overlay $p.Value }
+                        else                        { $p.Value }
+    }
+    [pscustomobject]$out
+}
+
+if ($Pull) {
+    $liveJson  = Join-Path $dst "settings.json"
+    $vaultJson = Join-Path $src "settings.json"
+    if (-not (Test-Path $liveJson)) {
+        Write-Host "  skipped (no live settings.json)" -ForegroundColor DarkGray
+    } else {
+        $live   = Get-Content $liveJson -Raw | ConvertFrom-Json
+        $vault  = if (Test-Path $vaultJson) { Get-Content $vaultJson -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
+        $merged = (Merge-Json -Base $vault -Overlay $live | ConvertTo-Json -Depth 100)
+        $before = if (Test-Path $vaultJson) { (Get-Content $vaultJson -Raw) } else { "" }
+        if ($merged.Trim() -eq $before.Trim()) {
+            Write-Host "  unchanged (vault already carries every live key)" -ForegroundColor DarkGray
+            $script:same++
+        } elseif ($DryRun) {
+            Write-Host "  would MERGE live keys into vault settings.json" -ForegroundColor Yellow
+            $script:changed++
+        } else {
+            Set-Content -Path $vaultJson -Value $merged -Encoding UTF8
+            Write-Host "  merged live -> vault settings.json" -ForegroundColor Green
+            $script:changed++
+        }
+    }
+} else {
+    Write-Host "  skipped on push (merge target - use -Install)" -ForegroundColor DarkGray
+}
 
 Write-Host ""
 Write-Host "=== Done ==="

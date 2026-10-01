@@ -1,6 +1,6 @@
 # Session Handoff — `~/.rules` cross-harness canonical instruction source
 
-Generated: 2026-08-24 · Mode: handoff · Repo: `C:\Users\user\.harness`
+Repo: `C:\Users\user\.harness` · Mode: handoff
 
 ## Objective
 
@@ -22,8 +22,8 @@ Do not re-derive this. It is measured and recorded as Canon #8 / #9.
 Sorted-unique line comparison: **3 lines in common**, 295 only-in-CLAUDE,
 340 only-in-AGENTS. Zero shared H2 headings.
 
-I checked the obvious confound: both files are uniformly CRLF (CR counts 393 and
-465), so the raw comparison was already like-for-like; re-running with CR
+The obvious confound was checked: both files are uniformly CRLF (CR counts 393
+and 465), so the raw comparison was already like-for-like; re-running with CR
 stripped, trailing whitespace trimmed and blank lines dropped still yields 3.
 
 **Consequence:** these are not drifted copies of one rule set — they are two

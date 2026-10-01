@@ -1,5 +1,5 @@
 {
-  "model": "opus[1m]",
+  "model": "sonnet",
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
@@ -7,7 +7,7 @@
     "code-review@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
+    "github@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
@@ -15,51 +15,106 @@
     "commit-commands@claude-plugins-official": true
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/membank.py"
-          },
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/log_event.py"
-          },
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/playbook.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/log_event.py"
-          },
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/playbook.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
+    "SessionStart": {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/membank.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/log_event.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.harness/hooks/session_resume.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/playbook.py",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/process_ledger.py --watermark",
+          "timeout": 10
+        }
+      ]
+    },
+    "UserPromptSubmit": {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/membank.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/log_event.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/spec_state.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/skills/retrieve-skills/hook.py",
+          "timeout": 20
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.harness/hooks/codebase_map.py",
+          "timeout": 5
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/playbook.py",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
+          "timeout": 10
+        }
+      ]
+    },
     "PreToolUse": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write|NotebookEdit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/file_manifest.py",
+            "timeout": 10,
+            "statusMessage": "Checking file table..."
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/spec_gate.py",
+            "timeout": 15,
+            "statusMessage": "Checking spec gate..."
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.harness/hooks/security_scan.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/source_write_guard.py",
+            "timeout": 10
           }
         ]
       }
@@ -70,6 +125,35 @@
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Read|Edit|Write|NotebookEdit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/spec_state.py"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/turn_write_log.py",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/test_gen.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/spec_attribution.py",
+            "timeout": 10
           }
         ]
       },
@@ -88,39 +172,117 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/spec_attribution.py",
+            "command": "python C:/Users/user/.claude/hooks/source_write_guard.py",
             "timeout": 10
           }
         ]
       }
     ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/log_event.py"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/verify_gate.py"
-          },
-          {
-            "type": "command",
-            "command": "python C:/Users/user/.claude/hooks/log_event.py"
-          }
-        ]
-      }
-    ]
+    "SessionEnd": {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/log_event.py"
+        },
+        {
+          "type": "command",
+          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_end.py"
+        }
+      ]
+    },
+    "Stop": {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/verify_gate.py"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/log_event.py"
+        },
+        {
+          "type": "command",
+          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/self_review.py"
+        },
+        {
+          "type": "command",
+          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/review_changes.py",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_handoff.py --mode handoff"
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/task_lineage.py",
+          "timeout": 15,
+          "statusMessage": "Checking file-to-task lineage..."
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/file_manifest.py --audit",
+          "timeout": 15,
+          "statusMessage": "Auditing unclaimed files..."
+        },
+        {
+          "type": "command",
+          "command": "python C:/Users/user/.claude/hooks/process_ledger.py",
+          "timeout": 10,
+          "statusMessage": "Checking process ledger..."
+        }
+      ]
+    },
+    "PreCompact": {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/pre_compact.py"
+        }
+      ]
+    }
   },
-  "effortLevel": "low",
+  "effortLevel": "medium",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
-  "theme": "dark"
+  "theme": "dark",
+  "env": {
+    "MCP_TIMEOUT": "120000",
+    "MCP_TOOL_TIMEOUT": "120000"
+  },
+  "autoUpdatesChannel": "latest",
+  "agentPushNotifEnabled": true,
+  "mcpServers": {},
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: Not queryable here (no git remotes configured for this repo) — assume private unless later shown otherwise",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: Not queryable here (no remotes; default branch unknown — origin/HEAD unset)",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repo only (no remotes configured) — no additional orgs configured",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "**Repository visibility**: unverified — origin remote is absent, so this repo's host/visibility could not be checked here; treat as possibly public until confirmed",
+      "**Default / protected branches**: unknown — origin/HEAD unset and no remotes configured; branch protection not queryable",
+      "**Source control**: The trusted repo (d:\\c\\arxiv_id_lists) only — no remotes configured, no additional orgs configured",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development",
+      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) — no remotes configured, so no remote scoping applies",
+      "**Org-specific CLIs**: None configured",
+      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) — no remotes configured, visibility unverified so treat as possibly public for commit/push scoping"
+    ]
+  }
 }

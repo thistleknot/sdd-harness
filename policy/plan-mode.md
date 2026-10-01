@@ -52,20 +52,43 @@ When plan mode produces a `plan.md`, use this structure:
 - If the repo is NOT spec-armed, plan mode output writes to `plan.md` in the project root (or `.spec/plan.md` if the user arms it later).
 - The spec gate does NOT block writes to `.spec/` artifacts — only source files. So writing the plan itself is always allowed, even in a gated repo.
 
-## Exit → Playbook (the default for multi-task plans)
+## The word is `architect`
+
+`architect` is the operator's keyword for entering this whole mode — "architect this",
+"architect the migration". It means author the ledger, do not write code. "plan" stays
+a recognised synonym (this state is natively called plan mode), but the artifact is
+`playbook.md`, not `plan.md`, and pending work is `[OPEN]`, not `[TODO]`.
+
+**And it is named for what it changes.** Plan mode mints `plans/<random-slug>.md`
+before anything is known about the work; that is a placeholder. REQ #36: the
+filename is the kebab slug of the artifact's own H1 (<= 6 words / 60 chars), and
+renaming it is the first act once writes unlock. `~/.claude/hooks/playbook.py
+--pivot` flags a mismatch at `ExitPlanMode` and prints the exact target path.
+
+## Exit → Playbook (the default for multi-task architectures)
 
 Persisting the plan answers *where the plan lives*. It does not answer *who executes
 it*, and executing a 9-step plan inline means the session working step 9 still carries
 every artifact of steps 1–8. That is context rot, and it makes the last tasks the worst.
 
-For any plan of **3+ tasks**, `plan.md` becomes `playbook.md` — a ledger of `[TODO]`
+For any architecture of **3+ tasks**, the output is `playbook.md` — a ledger of `[OPEN]`
 items worked **one task per fresh subagent session**, each running the model ladder
-(fable authors the plan → opus subplans one task → sonnet implements it → opus only
+(fable authors the ledger → opus subplans one task → sonnet implements it → opus only
 re-enters on `[BLOCKED]`). The main session holds the ledger and nothing else.
 
+Tasks group into **layers**, one operation type per layer:
+
+- **parallel** — independent, like a mean and a stdev. Every `[OPEN]` task in the layer
+  is dispatched at once (max 4 concurrent, `_Files:` sets disjoint).
+- **sequential** — serially dependent, like an EMA or an RNN. One at a time, in order.
+
+A layer is a **barrier**: nothing in the next layer starts until every task in the
+current one is `[DONE]`. Mixing types inside a layer is legal but discouraged — it
+strands the parallel siblings and breaks prompt-cache reuse across the fan-out.
+
 Offered automatically by `~/.claude/hooks/playbook.py` (PostToolUse on `ExitPlanMode`;
-also `--plan` on UserPromptSubmit, which catches plan requests before plan mode is even
-entered). Full protocol and ledger format: `~/.claude/rules/playbook.md`.
+also `--plan` on UserPromptSubmit, which catches architect requests before plan mode is
+even entered). Full protocol and ledger format: `~/.claude/rules/playbook.md`.
 
 Note: a hook cannot switch the session model — no such field exists in the hook output
 contract. The ladder is therefore per-dispatch, not per-session.

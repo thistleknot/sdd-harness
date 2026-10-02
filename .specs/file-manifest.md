@@ -40,6 +40,7 @@ gate does not fire on them, and they should be deleted, not preserved.
 | *.md | policy/ | docs | none | Named policies referenced by rules (plan mode, and later siblings). |
 | ** | instructions/ | docs | none | Per-harness instruction fragments emitted by the adapters. |
 | README.md | / | docs | none | What this tree is, for a reader who has never seen it. |
+| *.md | docs/playbooks/ | docs | named-for-intent | Task ledgers an operator works through, one per campaign, in the playbook format. |
 
 ## Spec surface — requirements, design, and the record store
 

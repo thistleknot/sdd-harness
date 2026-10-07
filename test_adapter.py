@@ -95,7 +95,28 @@ def test_sync_github_copilot_writes_to_workspace(config, tmp_path, monkeypatch):
     assert data["mcpServers"]["todo"]["type"] == "stdio"
 
 
-def test_sync_vscode_uses_servers_key_and_preserves_existing(config, tmp_path, monkeypatch):
+@pytest.fixture
+def vscode_home(tmp_path, monkeypatch):
+    """Keep sync_vscode off the real ~/.copilot and ~/.claude."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("adapter.Path.home", lambda: home)
+    return home
+
+
+def test_sync_vscode_writes_hooks_config_pointing_at_shim(config, tmp_path, monkeypatch, vscode_home):
+    monkeypatch.setattr("adapter.vscode_user_dir", lambda: tmp_path / "Code" / "User")
+    sync_vscode(config)
+    data = json.loads((vscode_home / ".copilot" / "hooks" / "harness.json").read_text())
+    assert set(data["hooks"]) == {"SessionStart", "UserPromptSubmit", "PreToolUse",
+                                  "PostToolUse", "PreCompact", "Stop"}
+    pre = data["hooks"]["PreToolUse"][0]
+    assert pre["type"] == "command"
+    assert "vscode_shim.py" in pre["command"] and pre["command"].endswith(" PreToolUse")
+    assert "matcher" not in pre
+
+
+def test_sync_vscode_uses_servers_key_and_preserves_existing(config, tmp_path, monkeypatch, vscode_home):
     monkeypatch.setattr("adapter.vscode_user_dir", lambda: tmp_path)
     existing = {
         "servers": {"memory": {"type": "stdio", "command": "npx"}},
@@ -112,14 +133,14 @@ def test_sync_vscode_uses_servers_key_and_preserves_existing(config, tmp_path, m
     assert data["inputs"] == [{"id": "k"}]
 
 
-def test_sync_vscode_creates_file_when_absent(config, tmp_path, monkeypatch):
+def test_sync_vscode_creates_file_when_absent(config, tmp_path, monkeypatch, vscode_home):
     monkeypatch.setattr("adapter.vscode_user_dir", lambda: tmp_path / "Code" / "User")
     sync_vscode(config)
     data = json.loads((tmp_path / "Code" / "User" / "mcp.json").read_text())
     assert set(data["servers"]) == {"retrieve-skills", "todo"}
 
 
-def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path, monkeypatch):
+def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path, monkeypatch, vscode_home):
     monkeypatch.setattr("adapter.vscode_user_dir", lambda: tmp_path)
     prompts = tmp_path / "prompts"
     prompts.mkdir()

@@ -78,6 +78,7 @@ gate does not fire on them, and they should be deleted, not preserved.
 | turn_write_log.py | hooks/ | code | hook-contract | PostToolUse: records every write for the Stop-time audits. |
 | test_gen.py | hooks/ | code | hook-contract | PostToolUse: proposes a test for source that shipped without one. |
 | convergence.py | hooks/ | code | hook-contract | Detects the same class of error repeating (Law 6). |
+| vscode_shim.py | hooks/ | code | hook-contract | Runs the Claude hooks from VS Code Copilot: maps tool names, re-applies matchers, folds verdicts back. |
 
 ## Adapters — one harness, several front ends
 

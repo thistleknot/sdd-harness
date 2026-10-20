@@ -36,6 +36,15 @@
       "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     }
   },
+  "global_hooks": {
+    "claude": [
+      {"event": "PreToolUse", "matcher": "Bash|Grep", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard search", "timeout": 10},
+      {"event": "PreToolUse", "matcher": "Read|Glob", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard read", "timeout": 10}
+    ],
+    "codex": [
+      {"event": "PreToolUse", "matcher": "Bash", "command": "C:/Users/user/.local/bin/graphify.EXE hook-check"}
+    ]
+  },
   "model_routing": {
     "claude-code": {
       "orchestrator": "claude-sonnet-5",

@@ -387,7 +387,7 @@ Skills come from the skill-retriever MCP server. Before starting a task, search 
 
 ## Code Graph (graphify)
 
-MCP server `graphify` (`query_graph`, `get_node`, path/explain tools; pass `project_path`). In a repo with `graphify-out/graph.json`, query the graph for "what calls / depends on X" before grepping across files; `graphify update .` rebuilds it with no LLM. No graph yet: build one only when the question spans many files. Edge tags EXTRACTED vs INFERRED: treat INFERRED as hypothesis.
+MCP server `graphify` (`query_graph`, `get_node`, path/explain tools; pass `project_path`); a global PreToolUse hook (from `harness.json` `global_hooks`) nudges toward the graph before Bash/Grep/Read/Glob. In a repo with `graphify-out/graph.json`, query the graph for "what calls / depends on X" before grepping across files; `graphify update .` rebuilds it with no LLM. No graph yet: build one only when the question spans many files. Edge tags EXTRACTED vs INFERRED: treat INFERRED as hypothesis.
 
 ## Starting Servers
 
@@ -427,6 +427,8 @@ Before proposing or writing code, determine which spec layer governs the work:
 - Catalog — when registering or mapping specs to files
 
 Agents must state, in one line, which layer they are entering and why.
+
+**Spec Kit is a first-class SDD workflow** beside the layers above. In a repo with `.specify/` (from `specify init`), drive work through the `speckit-*` skills in order (constitution, specify, clarify, plan, tasks, analyze, implement); skill `speckit` has the bootstrap and seams. Its `.specify/memory/constitution.md` is per project and does not replace `~/.harness/constitution.md`. `spec_gate.py` gates `.spec/` only, not `.specify/`.
 
 ### Hard gate
 

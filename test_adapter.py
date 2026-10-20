@@ -1,7 +1,20 @@
-"""Unit tests for adapter.py — six-harness MCP config projection.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| FIXTURE | Build temporary harness homes and representative MCP configs | [mandatory] | R1 |
+| PROJECT | Invoke each harness adapter against its temporary destinations | [mandatory] | R1 |
+| VERIFY | Check native formats, canonical prompt content, and preserved files | [mandatory] | R2, R3 |
 
-Tests use tmp_path fixtures to avoid writing to real harness config files.
-Each sync function is tested for correct output format per harness.
+R1: When a sync test runs, its fixtures MUST isolate writes from live config.
+R2: When VS Code instructions are generated, they MUST contain the complete
+canonical claude/AGENTS.md text (prompt-sync requirement R5).
+R3: When VS Code sync repeats, its generated instructions MUST remain identical.
+
+CLOSED: Pinning the literal '# Operating Core' title was rejected because the
+operator's updated canonical prompt uses '# Operating Contract'.
+
+Preconditions: pytest and the adapter dependencies are installed.
+Failure modes: malformed projection, omitted prompt text, overwritten unmanaged
+files, or non-idempotent generation fail assertions.
 """
 from __future__ import annotations
 
@@ -12,9 +25,12 @@ from unittest.mock import patch
 import pytest
 
 from adapter import (
+    HARNESS_AGENTS,
+    ensure_global_hooks,
     load_harness,
     sync_claude_code,
     sync_codex,
+    sync_codex_hooks,
     sync_github_copilot,
     sync_kiro,
     sync_opencode,
@@ -74,15 +90,137 @@ def test_sync_opencode_uses_streamable_http(config, tmp_path):
     assert data["mcp"]["todo"]["command"] == ["python", "todo_mcp.py"]
 
 
-def test_sync_codex_writes_to_codex_dir(config, tmp_path):
+def test_sync_opencode_reads_block_comments_trailing_commas_and_keeps_other_keys(config, tmp_path):
+    """The shared JSONC parser handles what the old line-start regex could not (block comments, inline //)."""
+    oc_dir = tmp_path / ".config" / "opencode"
+    oc_dir.mkdir(parents=True)
+    oc_json = oc_dir / "opencode.json"
+    oc_json.write_text('{\n  /* block */ "model": "m", // inline\n  "url": "https://x.example/a//b",\n  "list": [1,],\n}\n',
+                       encoding="utf-8")
+    with patch("adapter.Path.home", return_value=tmp_path):
+        sync_opencode(config)
+    data = json.loads(oc_json.read_text())
+    assert (data["model"], data["url"], data["list"]) == ("m", "https://x.example/a//b", [1])
+    assert "retrieve-skills" in data["mcp"]
+
+
+def test_sync_opencode_skips_an_unparseable_config_without_touching_it(config, tmp_path, capsys):
+    oc_dir = tmp_path / ".config" / "opencode"
+    oc_dir.mkdir(parents=True)
+    oc_json = oc_dir / "opencode.json"
+    oc_json.write_bytes(b"{ not json")
+    with patch("adapter.Path.home", return_value=tmp_path):
+        sync_opencode(config)
+    assert oc_json.read_bytes() == b"{ not json" and "failed to parse config" in capsys.readouterr().out
+
+
+REA_TABLE = (
+    '[mcp_servers.rea]\n'
+    'command = "npx"\n'
+    'args = [ "-y", "rea-agents@4.0.1", "mcp" ]\n'
+    'startup_timeout_sec = 30\n'
+)
+
+
+def _codex_sync(config, tmp_path, existing=None):
+    cfg = tmp_path / ".codex" / "config.toml"
+    if existing is not None:
+        cfg.parent.mkdir(parents=True)
+        cfg.write_bytes(existing.encode("utf-8"))
     with patch("adapter.Path.home", return_value=tmp_path):
         sync_codex(config)
-    codex_json = tmp_path / ".codex" / "mcp.json"
-    assert codex_json.exists()
-    data = json.loads(codex_json.read_text())
-    assert "retrieve-skills" in data["mcpServers"]
-    assert data["mcpServers"]["retrieve-skills"]["url"] == "http://127.0.0.1:8765/mcp"
-    assert data["mcpServers"]["todo"]["command"] == "python"
+    return cfg
+
+
+def _toml_loads(text):
+    try:
+        import tomllib as parser  # TOML parser used: tomllib (3.11+) else tomli
+    except ImportError:
+        import tomli as parser
+    return parser.loads(text)
+
+
+def test_sync_codex_adds_block_and_keeps_rea_bytes(config, tmp_path):
+    cfg = _codex_sync(config, tmp_path, existing=REA_TABLE)
+    text = cfg.read_bytes().decode("utf-8")
+    begin = text.index("# >>> harness mcp servers")
+    assert text[:begin].rstrip("\n") + "\n" == REA_TABLE
+    assert "[mcp_servers.retrieve-skills]" in text and "[mcp_servers.todo]" in text
+    assert not (tmp_path / ".codex" / "mcp.json").exists()
+
+
+def test_sync_codex_second_run_is_noop(config, tmp_path, capsys):
+    cfg = _codex_sync(config, tmp_path, existing=REA_TABLE)
+    first = cfg.read_bytes()
+    capsys.readouterr()
+    _codex_sync(config, tmp_path)
+    assert cfg.read_bytes() == first
+    assert "unchanged" in capsys.readouterr().out
+
+
+def test_sync_codex_renders_stdio_and_http(config, tmp_path):
+    text = _codex_sync(config, tmp_path).read_text(encoding="utf-8")
+    assert '[mcp_servers.retrieve-skills]\nurl = "http://127.0.0.1:8765/mcp"' in text
+    assert '[mcp_servers.todo]\ncommand = "python"\nargs = ["todo_mcp.py"]' in text
+    assert '[mcp_servers.todo.env]\n"PYTHONUTF8" = "1"' in text
+
+
+def test_sync_codex_refuses_duplicate_table(config, tmp_path):
+    existing = REA_TABLE + '\n[mcp_servers.retrieve-skills]\nurl = "http://x"\n'
+    cfg = tmp_path / ".codex" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_bytes(existing.encode("utf-8"))
+    with patch("adapter.Path.home", return_value=tmp_path):
+        with pytest.raises(RuntimeError, match=r"\[mcp_servers\.retrieve-skills\]"):
+            sync_codex(config)
+    assert cfg.read_bytes() == existing.encode("utf-8")
+
+
+def test_sync_codex_result_parses_as_toml(config, tmp_path):
+    cfg = _codex_sync(config, tmp_path, existing=REA_TABLE)
+    data = _toml_loads(cfg.read_text(encoding="utf-8"))
+    assert data["mcp_servers"]["rea"]["startup_timeout_sec"] == 30
+    assert data["mcp_servers"]["retrieve-skills"]["url"] == "http://127.0.0.1:8765/mcp"
+    assert data["mcp_servers"]["todo"]["env"] == {"PYTHONUTF8": "1"}
+
+
+def _hooks_sync(config, tmp_path, existing=None):
+    f = tmp_path / ".codex" / "hooks.json"
+    if existing is not None:
+        f.parent.mkdir(parents=True)
+        f.write_text(existing, encoding="utf-8")
+    with patch("adapter.Path.home", return_value=tmp_path):
+        sync_codex_hooks(config)
+    return f
+
+
+def test_sync_codex_hooks_new_file_has_entry_and_second_run_unchanged(config, tmp_path, capsys):
+    f = _hooks_sync(config, tmp_path)
+    cmd = json.loads(f.read_text())["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    assert cmd["type"] == "command" and cmd["timeout"] == 30
+    assert cmd["command"].endswith("playbook.py --feature")
+    assert "updated" in capsys.readouterr().out
+    before = f.read_bytes()
+    _hooks_sync(config, tmp_path)
+    assert f.read_bytes() == before
+    assert "unchanged" in capsys.readouterr().out
+
+
+def test_sync_codex_hooks_keeps_unrelated_hooks(config, tmp_path):
+    other = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "echo hi", "timeout": 5}]}]}}
+    f = _hooks_sync(config, tmp_path, json.dumps(other))
+    data = json.loads(f.read_text())
+    assert data["hooks"]["PreToolUse"] == other["hooks"]["PreToolUse"]
+    assert "UserPromptSubmit" in data["hooks"]
+
+
+def test_sync_codex_hooks_refuses_foreign_user_prompt_submit(config, tmp_path):
+    foreign = json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+        {"type": "command", "command": "mine.exe"}]}]}})
+    with pytest.raises(RuntimeError, match="mine.exe"):
+        _hooks_sync(config, tmp_path, foreign)
+    assert (tmp_path / ".codex" / "hooks.json").read_text() == foreign
 
 
 def test_sync_github_copilot_writes_to_workspace(config, tmp_path, monkeypatch):
@@ -141,6 +279,7 @@ def test_sync_vscode_creates_file_when_absent(config, tmp_path, monkeypatch, vsc
 
 
 def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path, monkeypatch, vscode_home):
+    """Guarantee: generated instructions embed the canonical prompt verbatim."""
     monkeypatch.setattr("adapter.vscode_user_dir", lambda: tmp_path)
     prompts = tmp_path / "prompts"
     prompts.mkdir()
@@ -150,7 +289,7 @@ def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path
     sync_vscode(config)
     first = (prompts / "harness-core.instructions.md").read_text(encoding="utf-8")
     assert first.startswith("---\napplyTo: '**'\n---")
-    assert "# Operating Core" in first
+    assert HARNESS_AGENTS.read_text(encoding="utf-8") in first
     assert "Generated by" in first
     assert "## Where the rest lives" in first
     assert str(Path.home() / ".harness" / "constitution.md") in first
@@ -164,3 +303,48 @@ def test_all_targets_registered():
     """TARGETS holds every harness and --target can select each one."""
     import adapter
     assert set(adapter.TARGETS) == {"claude", "opencode", "kiro", "pi", "codex", "copilot", "vscode"}
+
+
+def test_agents_target_is_opt_in_so_target_all_never_edits_agent_settings():
+    import adapter
+    assert adapter.OPT_IN_TARGETS == ("agents",) and "agents" not in adapter.TARGETS
+
+
+def test_sync_agents_plans_by_default_and_applies_only_when_asked(monkeypatch):
+    import adapter
+    import render_agents
+    seen = []
+    monkeypatch.setattr(render_agents, "main", lambda argv: seen.append(argv) or 0)
+    adapter.sync_agents({})
+    adapter.sync_agents({}, apply=True)
+    assert seen == [["--harness", "all", "--plan"], ["--harness", "all", "--apply"]]
+
+
+GRAPH_HOOKS = [
+    {"event": "PreToolUse", "matcher": "Bash|Grep", "command": "g hook-guard search", "timeout": 10},
+    {"event": "PreToolUse", "matcher": "Read|Glob", "command": "g hook-guard read", "timeout": 10},
+]
+
+
+def test_ensure_global_hooks_appends_beside_existing_and_is_idempotent(tmp_path):
+    path = tmp_path / "settings.json"
+    other = {"matcher": "Bash", "hooks": [{"type": "command", "command": "rtk hook claude"}]}
+    path.write_text(json.dumps({"model": "x", "hooks": {"PreToolUse": [other]}}), encoding="utf-8")
+
+    assert ensure_global_hooks(path, GRAPH_HOOKS) is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    groups = data["hooks"]["PreToolUse"]
+    assert groups[0] == other
+    assert [g["matcher"] for g in groups] == ["Bash", "Bash|Grep", "Read|Glob"]
+    assert groups[1]["hooks"] == [{"type": "command", "command": "g hook-guard search", "timeout": 10}]
+    assert data["model"] == "x"
+
+    assert ensure_global_hooks(path, GRAPH_HOOKS) is False
+    assert json.loads(path.read_text(encoding="utf-8")) == data
+
+
+def test_ensure_global_hooks_creates_absent_file_and_omits_empty_matcher(tmp_path):
+    path = tmp_path / "hooks.json"
+    ensure_global_hooks(path, [{"event": "Stop", "command": "c"}])
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "c"}]}]}}

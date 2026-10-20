@@ -22,6 +22,18 @@
     "specs": {
       "type": "http",
       "url": "http://127.0.0.1:8057/mcp"
+    },
+    "graphify": {
+      "type": "stdio",
+      "command": "C:/Users/user/.local/bin/graphify-mcp.exe",
+      "args": [],
+      "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    },
+    "agentic-kanban": {
+      "type": "stdio",
+      "command": "c:/users/user/py310/Scripts/python.exe",
+      "args": ["C:/Users/user/.harness/board_mcp.py"],
+      "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     }
   },
   "model_routing": {

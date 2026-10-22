@@ -1,14 +1,42 @@
-"""Cross-harness adapter: reads ~/.harness/harness.json, writes per-harness configs.
+"""Cross-harness MCP projection from the ~/.harness registry.
 
-Usage: python adapter.py [--target claude|opencode|kiro|pi|codex|copilot|vscode|all]
+Pipeline:
+| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| LOAD | Read harness.json as the canonical server registry | [mandatory] | R1 |
+| PROJECT | Render each registered server in the native client schema, including Hermes via its native writer | [mandatory] | R1, R2, R7 |
+| CLEAN | Remove only the exact retired C: Graphify hook commands before projecting current hooks | [mandatory] | R8 |
+| WRITE | Merge through harness_write so backups and atomic writes apply | [mandatory] | R3 |
+| VERIFY | Native clients load their registered servers and unmanaged entries survive | [contract] | R4 |
 
-Ensures all harnesses share the same MCP server registrations and model routing.
+R1: WHEN a target sync runs, it MUST project only the central harness registry.
+R2: Each target MUST use its user-level native configuration path and schema.
+R3: Existing configuration MUST be backed up before any changed bytes are written.
+R4: WHEN a target supports MCP, sync MUST preserve unmanaged entries and be repeatable.
+R5: WHERE a client has no MCP transport, its existing supported integration MUST remain intact.
+R6: WHEN a local server is projected to OpenCode, its documented per-server tool-fetch timeout MUST
+allow the measured cold-start window for isolated F: Python environments.
+R7: When Hermes sync runs, the system shall project every registry entry through Hermes' own
+non-interactive MCP config writer and preserve unrelated Hermes settings and MCP entries.
+R8: When native hook projections are synchronized, the system shall remove only the exact retired
+C:/Users/user/.local/bin/graphify.EXE hook commands and preserve every unrelated hook.
+CLOSED: A separate OpenAI-only registry is rejected because ~/.harness is the shared
+cross-harness source. Interactive `hermes mcp add` is rejected because it performs server
+discovery and prompts; Hermes' `_save_mcp_server` is the native non-interactive writer. Scalar-only
+`hermes config set` is rejected because it cannot create registry entries with argument arrays.
+Pi MCP projection is rejected because the installed Pi integration is its retrieval extension,
+not an MCP client.
+
+Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
+Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,10 +45,38 @@ HARNESS_AGENTS = Path(__file__).parent / "claude" / "AGENTS.md"
 VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 # SessionEnd has no VS Code equivalent; SubagentStart/Stop have no Claude-settings hooks to run.
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
+OPENCODE_LOCAL_TIMEOUT_MS = 240000
+RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
+    "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
+    "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
+    "C:/Users/user/.local/bin/graphify.EXE hook-check",
+})
 
 
 def load_harness() -> dict:
     return json.loads(HARNESS_CONFIG.read_text(encoding="utf-8"))
+
+
+def write_server_projection(path: Path, key: str, servers: dict, *, jsonc: bool = False) -> bool:
+    """Merge registered servers into a native config and write through the harness backup path.
+
+    Require: `servers` contains only this adapter's registered MCP names.
+    Guarantee: unrelated root keys and unregistered servers survive; changed files are backed up.
+    Maintain: target-owned server entries are replaced as complete values on every run.
+    Assert: the result remains valid JSON before handing it to the safe atomic writer.
+    """
+    import harness_write
+
+    existing = harness_write.read_existing(path)
+    data = harness_write.load_jsonc(existing) if existing else {}
+    current = data.get(key, {})
+    if not isinstance(current, dict):
+        raise harness_write.WriteError(f"{path}: expected an object at {key!r}")
+    data[key] = {**current, **servers}
+    rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    artifact = harness_write.Artifact(path=path, text=rendered, mode="file")
+    changes = harness_write.plan([artifact])
+    return bool(harness_write.apply(changes, Path.home() / ".harness" / "backups"))
 
 
 def ensure_global_hooks(path: Path, hooks: list[dict]) -> bool:
@@ -53,6 +109,54 @@ def ensure_global_hooks(path: Path, hooks: list[dict]) -> bool:
     return bool(harness_write.apply(harness_write.plan([artifact]), Path.home() / ".harness" / "backups"))
 
 
+def remove_retired_graphify_hooks(path: Path) -> bool:
+    """Remove only the known retired C: Graphify hook commands from one hook file.
+
+    Require: `path` is a native JSON(C) hook file or does not exist.
+    Guarantee: exact retired commands are removed; all other hook entries and settings survive.
+    Maintain: event order and mixed hook groups remain unchanged.
+    Assert: the safe writer is called only when an exact command was removed.
+    """
+    import harness_write
+
+    existing = harness_write.read_existing(path)
+    if not existing:
+        return False
+    data = harness_write.load_jsonc(existing)
+    events = data.get("hooks", {})
+    changed = False
+    for event, groups in list(events.items()):
+        single_group = isinstance(groups, dict)
+        if single_group:
+            groups = [groups]
+        elif not isinstance(groups, list):
+            continue
+        kept_groups = []
+        for group in groups:
+            if not isinstance(group, dict):
+                kept_groups.append(group)
+                continue
+            hooks = group.get("hooks", [])
+            if not isinstance(hooks, list):
+                kept_groups.append(group)
+                continue
+            kept_hooks = [hook for hook in hooks if not isinstance(hook, dict)
+                          or hook.get("command") not in RETIRED_GRAPHIFY_HOOK_COMMANDS]
+            group_changed = len(kept_hooks) != len(hooks)
+            changed = changed or group_changed
+            if kept_hooks or not group_changed:
+                group["hooks"] = kept_hooks
+                kept_groups.append(group)
+        if kept_groups:
+            events[event] = kept_groups[0] if single_group and len(kept_groups) == 1 else kept_groups
+        else:
+            del events[event]
+    if not changed:
+        return False
+    artifact = harness_write.Artifact(path=path, text=json.dumps(data, indent=2), mode="file")
+    return bool(harness_write.apply(harness_write.plan([artifact]), Path.home() / ".harness" / "backups"))
+
+
 def sync_global_hooks(config: dict, harness: str) -> None:
     """Install config["global_hooks"][harness] into that harness's hooks file(s).
 
@@ -67,18 +171,16 @@ def sync_global_hooks(config: dict, harness: str) -> None:
     paths = {"claude": [home / ".claude" / "settings.json", home / ".harness" / "claude" / "settings.json"],
              "codex": [home / ".codex" / "hooks.json"]}[harness]
     for path in paths:
+        removed = remove_retired_graphify_hooks(path)
         state = "updated" if ensure_global_hooks(path, hooks) else "unchanged"
+        if removed and state == "unchanged":
+            state = "cleaned"
         print(f"  {harness} global hooks: {state} {path} ({len(hooks)} declared)")
 
 
 def sync_claude_code(config: dict) -> None:
     """Update ~/.claude.json with MCP servers from harness config."""
     claude_json = Path.home() / ".claude.json"
-    if claude_json.exists():
-        data = json.loads(claude_json.read_text(encoding="utf-8"))
-    else:
-        data = {}
-
     servers = {}
     for name, srv in config["mcp_servers"].items():
         if srv["type"] == "http":
@@ -89,14 +191,20 @@ def sync_claude_code(config: dict) -> None:
                 entry["env"] = srv["env"]
             servers[name] = entry
 
-    data["mcpServers"] = {**data.get("mcpServers", {}), **servers}
-    claude_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    print(f"  Claude Code: updated {claude_json} ({len(servers)} servers)")
+    changed = write_server_projection(claude_json, "mcpServers", servers)
+    print(f"  Claude Code: {'updated' if changed else 'unchanged'} {claude_json} ({len(servers)} servers)")
     sync_global_hooks(config, "claude")
 
 
 def sync_opencode(config: dict) -> None:
-    """Update ~/.config/opencode/opencode.json MCP block."""
+    """Project the central registry into OpenCode's native MCP schema.
+
+    Require: the registry uses `http` or `stdio` transport entries.
+    Guarantee: remote HTTP and local command forms match OpenCode's schema; local tools receive
+        enough catalog time for the measured cold start of their F: environments.
+    Maintain: existing unmanaged root keys and MCP names survive the safe writer merge.
+    Assert: the generated object is valid JSONC and preserves each server's transport.
+    """
     oc_json = Path.home() / ".config" / "opencode" / "opencode.json"
     if not oc_json.exists():
         print("  opencode: config not found, skipping")
@@ -116,17 +224,16 @@ def sync_opencode(config: dict) -> None:
     mcp = {}
     for name, srv in config["mcp_servers"].items():
         if srv["type"] == "http":
-            mcp[name] = {"type": "streamable-http", "url": srv["url"], "enabled": True}
+            mcp[name] = {"type": "remote", "url": srv["url"], "enabled": True}
         else:
             entry = {"type": "local", "command": [srv["command"]] + srv.get("args", []), "enabled": True}
+            entry["timeout"] = OPENCODE_LOCAL_TIMEOUT_MS
             if srv.get("env"):
-                entry["env"] = srv["env"]
+                entry["environment"] = srv["env"]
             mcp[name] = entry
 
-    data["mcp"] = mcp
-    # Write back (without comments — they'll be lost, but config is functional)
-    oc_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    print(f"  opencode: updated {oc_json} ({len(mcp)} servers)")
+    changed = write_server_projection(oc_json, "mcp", mcp, jsonc=True)
+    print(f"  opencode: {'updated' if changed else 'unchanged'} {oc_json} ({len(mcp)} servers)")
 
 
 def sync_kiro(config: dict) -> None:
@@ -144,17 +251,63 @@ def sync_kiro(config: dict) -> None:
                 entry["env"] = srv["env"]
             servers[name] = entry
 
-    output = {"mcpServers": servers}
-    kiro_json.write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print(f"  Kiro: updated {kiro_json} ({len(servers)} servers)")
+    changed = write_server_projection(kiro_json, "mcpServers", servers)
+    print(f"  Kiro: {'updated' if changed else 'unchanged'} {kiro_json} ({len(servers)} servers)")
 
 
 def sync_pi(config: dict) -> None:
-    """Pi inherits Claude Code's MCP config — sync is identical to claude."""
-    # Pi uses the same ~/.claude.json as Claude Code (shared user scope)
-    # Only difference: pi routes through litellm. MCP registration is the same.
-    sync_claude_code(config)
-    print("  pi: shares Claude Code MCP config (no separate file)")
+    """Keep Pi's installed retrieval extension; Pi does not load these MCP entries."""
+    print("  pi: retained the existing retrieve-skills extension (no MCP config written)")
+
+
+def sync_hermes(config: dict) -> None:
+    """Project registry servers through Hermes' native MCP config writer.
+
+    Require: `hermes` is installed in a virtual environment with its sibling Python executable.
+    Guarantee: managed entries match harness.json and Hermes preserves unrelated config values.
+    Maintain: Hermes owns serialization and validation; harness_write never opens credential files.
+    Assert: every registry entry is accepted by Hermes or the subprocess fails visibly.
+    """
+    hermes = shutil.which("hermes")
+    if not hermes:
+        raise FileNotFoundError("Hermes executable was not found on PATH")
+    python = Path(hermes).with_name("python.exe")
+    if not python.is_file():
+        raise FileNotFoundError(f"Hermes virtual-environment Python was not found: {python}")
+
+    servers = {}
+    for name, server in config["mcp_servers"].items():
+        entry = {"enabled": True}
+        if server["type"] == "http":
+            entry["url"] = server["url"]
+        else:
+            entry["command"] = server["command"]
+            entry["args"] = server.get("args", [])
+            if server.get("env"):
+                entry["env"] = server["env"]
+        servers[name] = entry
+
+    writer = (
+        "import json, sys\n"
+        "from hermes_cli.mcp_config import _save_mcp_server\n"
+        "payload = json.load(sys.stdin)\n"
+        "failed = [name for name, config in payload.items() if not _save_mcp_server(name, config)]\n"
+        "if failed:\n"
+        "    print(json.dumps({'rejected': failed}))\n"
+        "    raise SystemExit(1)\n"
+        "print(json.dumps({'saved': list(payload)}))\n"
+    )
+    result = subprocess.run(
+        [str(python), "-c", writer],
+        input=json.dumps(servers),
+        text=True,
+        capture_output=True,
+        check=True,
+        env=os.environ.copy(),
+    )
+    print(f"  Hermes: projected {len(servers)} servers through Hermes config writer")
+    if result.stdout.strip():
+        print(f"  Hermes writer: {result.stdout.strip()}")
 
 
 MCP_TOML_BEGIN = "# >>> harness mcp servers (generated by ~/.harness; edit harness.json, not this block) >>>"
@@ -251,11 +404,8 @@ def sync_codex_hooks(config: dict) -> None:
 
 
 def sync_github_copilot(config: dict) -> None:
-    """Write GitHub Copilot MCP config to .copilot/mcp.json in workspace."""
-    # Copilot MCP lives in the workspace, not user home
-    copilot_dir = Path.cwd() / ".copilot"
-    copilot_dir.mkdir(parents=True, exist_ok=True)
-    copilot_json = copilot_dir / "mcp.json"
+    """Merge GitHub Copilot CLI MCP config at the user-level path."""
+    copilot_json = Path.home() / ".copilot" / "mcp-config.json"
 
     servers = {}
     for name, srv in config["mcp_servers"].items():
@@ -267,9 +417,8 @@ def sync_github_copilot(config: dict) -> None:
                 entry["env"] = srv["env"]
             servers[name] = entry
 
-    output = {"mcpServers": servers}
-    copilot_json.write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print(f"  GitHub Copilot: updated {copilot_json} ({len(servers)} servers)")
+    changed = write_server_projection(copilot_json, "mcpServers", servers)
+    print(f"  GitHub Copilot: {'updated' if changed else 'unchanged'} {copilot_json} ({len(servers)} servers)")
 
 
 def vscode_user_dir() -> Path:
@@ -317,9 +466,8 @@ def sync_vscode(config: dict) -> None:
                 entry["env"] = srv["env"]
             servers[name] = entry
 
-    data["servers"] = {**data.get("servers", {}), **servers}
-    vscode_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    print(f"  VS Code: updated {vscode_json} ({len(servers)} servers)")
+    changed = write_server_projection(vscode_json, "servers", servers)
+    print(f"  VS Code: {'updated' if changed else 'unchanged'} {vscode_json} ({len(servers)} servers)")
 
     prompts_dir = vscode_json.parent / "prompts"
     prompts_dir.mkdir(exist_ok=True)
@@ -375,6 +523,7 @@ TARGETS = {
     "opencode": sync_opencode,
     "kiro": sync_kiro,
     "pi": sync_pi,
+    "hermes": sync_hermes,
     "codex": lambda config: (sync_codex(config), sync_codex_hooks(config), sync_global_hooks(config, "codex")),
     "copilot": sync_github_copilot,
     "vscode": sync_vscode,

@@ -2,12 +2,15 @@
 |---|---|---|---|
 | FIXTURE | Build temporary harness homes and representative MCP configs | [mandatory] | R1 |
 | PROJECT | Invoke each harness adapter against its temporary destinations | [mandatory] | R1 |
-| VERIFY | Check native formats, canonical prompt content, and preserved files | [mandatory] | R2, R3 |
+| VERIFY | Check native formats, Hermes writer payload, retired-hook cleanup, and preserved files | [mandatory] | R2, R3, R5 |
 
 R1: When a sync test runs, its fixtures MUST isolate writes from live config.
 R2: When VS Code instructions are generated, they MUST contain the complete
 canonical claude/AGENTS.md text (prompt-sync requirement R5).
 R3: When VS Code sync repeats, its generated instructions MUST remain identical.
+R4: When a local MCP is projected to OpenCode, the test MUST assert the configured
+tool-fetch timeout covers the measured cold start.
+R5: When a retired Graphify hook is removed, every unrelated hook and setting MUST survive.
 
 CLOSED: Pinning the literal '# Operating Core' title was rejected because the
 operator's updated canonical prompt uses '# Operating Contract'.
@@ -28,6 +31,7 @@ from adapter import (
     HARNESS_AGENTS,
     ensure_global_hooks,
     load_harness,
+    remove_retired_graphify_hooks,
     sync_claude_code,
     sync_codex,
     sync_codex_hooks,
@@ -77,7 +81,7 @@ def test_sync_kiro_writes_disabled_false(config, tmp_path):
     assert data["mcpServers"]["todo"]["command"] == "python"
 
 
-def test_sync_opencode_uses_streamable_http(config, tmp_path):
+def test_sync_opencode_uses_native_remote_and_local_schema(config, tmp_path):
     oc_dir = tmp_path / ".config" / "opencode"
     oc_dir.mkdir(parents=True)
     oc_json = oc_dir / "opencode.json"
@@ -85,9 +89,11 @@ def test_sync_opencode_uses_streamable_http(config, tmp_path):
     with patch("adapter.Path.home", return_value=tmp_path):
         sync_opencode(config)
     data = json.loads(oc_json.read_text())
-    assert data["mcp"]["retrieve-skills"]["type"] == "streamable-http"
+    assert data["mcp"]["retrieve-skills"]["type"] == "remote"
     assert data["mcp"]["todo"]["type"] == "local"
     assert data["mcp"]["todo"]["command"] == ["python", "todo_mcp.py"]
+    assert data["mcp"]["todo"]["timeout"] == 240000
+    assert data["mcp"]["todo"]["environment"] == {"PYTHONUTF8": "1"}
 
 
 def test_sync_opencode_reads_block_comments_trailing_commas_and_keeps_other_keys(config, tmp_path):
@@ -223,14 +229,27 @@ def test_sync_codex_hooks_refuses_foreign_user_prompt_submit(config, tmp_path):
     assert (tmp_path / ".codex" / "hooks.json").read_text() == foreign
 
 
-def test_sync_github_copilot_writes_to_workspace(config, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    sync_github_copilot(config)
-    copilot_json = tmp_path / ".copilot" / "mcp.json"
+def test_sync_github_copilot_writes_user_config_and_preserves_workspace_independent_entries(config, tmp_path):
+    path = tmp_path / ".copilot" / "mcp-config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcpServers": {"unmanaged": {"command": "keep"}}}), encoding="utf-8")
+    with patch("adapter.Path.home", return_value=tmp_path):
+        sync_github_copilot(config)
+    copilot_json = path
     assert copilot_json.exists()
     data = json.loads(copilot_json.read_text())
     assert data["mcpServers"]["retrieve-skills"]["type"] == "http"
     assert data["mcpServers"]["todo"]["type"] == "stdio"
+    assert data["mcpServers"]["unmanaged"] == {"command": "keep"}
+
+
+def test_pi_sync_does_not_write_claude_mcp_config(config, tmp_path, capsys):
+    from adapter import sync_pi
+
+    with patch("adapter.Path.home", return_value=tmp_path):
+        sync_pi(config)
+    assert not (tmp_path / ".claude.json").exists()
+    assert "retrieve-skills extension" in capsys.readouterr().out
 
 
 @pytest.fixture
@@ -302,7 +321,7 @@ def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path
 def test_all_targets_registered():
     """TARGETS holds every harness and --target can select each one."""
     import adapter
-    assert set(adapter.TARGETS) == {"claude", "opencode", "kiro", "pi", "codex", "copilot", "vscode"}
+    assert set(adapter.TARGETS) == {"claude", "opencode", "kiro", "pi", "hermes", "codex", "copilot", "vscode"}
 
 
 def test_agents_target_is_opt_in_so_target_all_never_edits_agent_settings():
@@ -348,3 +367,58 @@ def test_ensure_global_hooks_creates_absent_file_and_omits_empty_matcher(tmp_pat
     ensure_global_hooks(path, [{"event": "Stop", "command": "c"}])
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "c"}]}]}}
+
+
+def test_remove_retired_graphify_hooks_keeps_unrelated_entries(tmp_path):
+    path = tmp_path / "settings.json"
+    other = {"type": "command", "command": "python keep.py"}
+    retired = {"type": "command", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard search"}
+    current = {"type": "command", "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard read"}
+    path.write_text(json.dumps({"model": "keep", "hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [other, retired, current]},
+        {"matcher": "Read", "hooks": [
+            {"type": "command", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard read"}]},
+        {"matcher": "Empty", "hooks": []},
+    ], "Stop": {"hooks": [other, {"type": "command",
+                                    "command": "C:/Users/user/.local/bin/graphify.EXE hook-check"}]}}}),
+        encoding="utf-8")
+
+    assert remove_retired_graphify_hooks(path) is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    groups = data["hooks"]["PreToolUse"]
+    assert data["model"] == "keep"
+    assert groups[0]["hooks"] == [other, current]
+    assert groups[1] == {"matcher": "Empty", "hooks": []}
+    assert data["hooks"]["Stop"] == {"hooks": [other]}
+    assert all("C:/Users/user/.local/bin/graphify.EXE" not in hook["command"]
+               for group in groups for hook in group["hooks"])
+    assert remove_retired_graphify_hooks(path) is False
+
+
+def test_sync_hermes_uses_native_writer_for_registry_entries(config, tmp_path, monkeypatch, capsys):
+    import subprocess
+    import adapter
+
+    hermes = tmp_path / "venv" / "Scripts" / "hermes.exe"
+    hermes.parent.mkdir(parents=True)
+    python = hermes.with_name("python.exe")
+    python.touch()
+    monkeypatch.setattr(adapter.shutil, "which", lambda name: str(hermes))
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, '{"saved": ["retrieve-skills", "todo"]}', "")
+
+    monkeypatch.setattr(adapter.subprocess, "run", fake_run)
+    adapter.sync_hermes(config)
+
+    args, kwargs = calls[0]
+    assert args[:2] == [str(python), "-c"]
+    assert json.loads(kwargs["input"]) == {
+        "retrieve-skills": {"enabled": True, "url": "http://127.0.0.1:8765/mcp"},
+        "todo": {"enabled": True, "command": "python", "args": ["todo_mcp.py"],
+                 "env": {"PYTHONUTF8": "1"}},
+    }
+    assert kwargs["check"] is True and kwargs["capture_output"] is True
+    assert "projected 2 servers" in capsys.readouterr().out

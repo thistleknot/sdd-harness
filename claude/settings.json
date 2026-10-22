@@ -123,7 +123,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
+            "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard search",
             "timeout": 10
           }
         ]
@@ -133,7 +133,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
+            "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard read",
             "timeout": 10
           }
         ]

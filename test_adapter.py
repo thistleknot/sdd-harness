@@ -42,6 +42,18 @@ from adapter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_user_home(tmp_path, monkeypatch):
+    """Keep adapter tests and backup writes inside pytest-owned storage.
+
+    Require: pytest supplies a temporary directory before each test.
+    Guarantee: Path.home resolves to that isolated home for every adapter operation.
+    Maintain: Canonical source paths captured at import time are unchanged.
+    Assert: Tests cannot populate the operator's live backup directory.
+    """
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+
 @pytest.fixture
 def config():
     """Minimal harness config for testing."""
@@ -408,17 +420,58 @@ def test_sync_hermes_uses_native_writer_for_registry_entries(config, tmp_path, m
 
     def fake_run(args, **kwargs):
         calls.append((args, kwargs))
-        return subprocess.CompletedProcess(args, 0, '{"saved": ["retrieve-skills", "todo"]}', "")
+        return subprocess.CompletedProcess(args, 0,
+            '{"configured": ["retrieve-skills", "todo"], "changed": ["todo"], "snapshot": "fixture"}', "")
 
     monkeypatch.setattr(adapter.subprocess, "run", fake_run)
     adapter.sync_hermes(config)
 
     args, kwargs = calls[0]
-    assert args[:2] == [str(python), "-c"]
+    assert args == [str(python), str(adapter.HERMES_BRIDGE)]
     assert json.loads(kwargs["input"]) == {
         "retrieve-skills": {"enabled": True, "url": "http://127.0.0.1:8765/mcp"},
-        "todo": {"enabled": True, "command": "python", "args": ["todo_mcp.py"],
+        "todo": {"enabled": True, "command": "python", "args": ["todo_mcp.py"], "connect_timeout": 240,
                  "env": {"PYTHONUTF8": "1"}},
     }
     assert kwargs["check"] is True and kwargs["capture_output"] is True
-    assert "projected 2 servers" in capsys.readouterr().out
+    assert kwargs["timeout"] == 300
+    assert "configured 2 servers; changed 1; snapshot verified" in capsys.readouterr().out
+
+
+def test_canonical_registry_sync_cannot_reinstall_retired_graphify_hooks(tmp_path):
+    """Exercise published registry values rather than a hand-built hook fixture.
+
+    Require: The canonical registry contains the intended runtime paths.
+    Guarantee: Both native hook projections contain only current Graphify commands.
+    Maintain: All writes use the test's isolated home.
+    Assert: Every canonical local interpreter is on F: and no retired hook returns.
+    """
+    import adapter
+
+    config = load_harness()
+    for server in config["mcp_servers"].values():
+        if server["type"] == "stdio":
+            assert server["command"].lower().startswith("f:/")
+    for target in ("claude", "codex"):
+        adapter.sync_global_hooks(config, target)
+    for path in [tmp_path / ".claude" / "settings.json", tmp_path / ".codex" / "hooks.json"]:
+        content = path.read_text(encoding="utf-8")
+        assert "F:/Python/uv-tools/bin/graphify.EXE" in content
+        assert not any(command in content for command in adapter.RETIRED_GRAPHIFY_HOOK_COMMANDS)
+
+
+@pytest.mark.parametrize("name,key", [("claude", "mcpServers"), ("codex", "mcp_servers"),
+                                      ("vscode", "servers"), ("opencode", "mcp")])
+def test_native_projection_metadata_has_the_actual_server_key(name, key):
+    """Keep destination metadata usable across different native schemas.
+
+    Require: name identifies an existing native target.
+    Guarantee: Metadata exposes its native mapping key and user config path.
+    Maintain: No live configuration is read or written.
+    Assert: The reported disposition is GENERATE with the expected key.
+    """
+    import adapter
+
+    contract = adapter.mcp_projection_contract(name)
+    assert contract["strategy"] == "GENERATE" and contract["key"] == key
+    assert Path(contract["target"]).is_absolute()

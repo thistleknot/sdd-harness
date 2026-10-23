@@ -10,7 +10,6 @@ chess-deep-q-err.txt
 chess-deep-q-output.txt
 prompt.txt
 index.db
-manifest.toml
 
 # Secrets — never commit
 .env
@@ -31,6 +30,8 @@ eval/worktrees/
 
 # Runtime logs / captured process output
 specs/specs-mcp.service.log
+specs/specs-mcp.service-*.log
+board/*.db
 events/
 eval/results/**/*.log
 eval/results/**/*.err
@@ -49,3 +50,6 @@ agentic spec driven development.png
 
 # scratch: project-local, disposable
 .tmp/
+
+# Timestamped copies of live configs replaced by render_agents.py --apply (may hold credentials)
+backups/

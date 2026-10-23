@@ -1,0 +1,505 @@
+# manifest.toml — capability matrix as data.
+#
+# A recorded decision table, not code: no installer reads the cells (setup.py reads only
+# [runtime]). The agents rows are the exception that is guarded: specs/test_manifest_agents.py
+# compares them with render_agents.py. Every (artifact x harness) cell carries exactly one strategy:
+#
+#   LINK     formats are byte-identical -> directory junction / symlink.
+#            Zero drift by construction; live edits propagate both ways.
+#   GENERATE formats genuinely differ -> emit native form from canonical source.
+#            Copies drift, so generation must be idempotent and re-runnable.
+#   SKIP     capability absent in this harness. Must carry a `reason`.
+#            An explicit recorded decision, never an oversight.
+#
+# Rationale for each cell lives in inspirations.md.
+
+schema = 1
+canonical_root = "C:/Users/user/.harness"
+
+# ---------------------------------------------------------------- runtime
+# The pinned interpreter is 3.10, which predates tomllib (stdlib at 3.11+).
+# tomli 2.2.1 is installed there, so install.py uses:
+#     try: import tomllib
+#     except ModuleNotFoundError: import tomli as tomllib
+# Works unchanged on 3.10 -> 3.14. Do NOT force a Python upgrade for this;
+# the adapters' spawn path is pinned to py310 and moving it is a separate change.
+[runtime]
+python   = "C:/Users/user/py310/Scripts/python.exe"
+version  = "3.10.0"
+toml_lib = "tomli"                # stdlib tomllib once the pin moves to >=3.11
+available = ["3.10.0", "3.11.9", "3.12.0", "3.14"]
+
+# MCP servers have isolated projects and environments on F:; ordinary harness
+# hooks and non-MCP tools continue to use the general runtime above.
+[runtime.mcp]
+python          = "C:/Users/user/AppData/Roaming/uv/python/cpython-3.12.9-windows-x86_64-none/python.exe"
+version         = "3.12.9"
+environments_dir = "F:/Python/mcp"
+cache_dir       = "F:/Python/uv-cache"
+tool_dir        = "F:/Python/uv-tools"
+
+[runtime.mcp.projects]
+retrieve-skills      = "mcp/retrieve-skills"
+memory-index         = "mcp/memory-index"
+todo                 = "mcp/todo"
+specs                = "mcp/specs"
+data-science-skills  = "mcp/data-science-skills"
+agentic-kanban       = "mcp/agentic-kanban"
+
+[runtime.mcp.tools]
+graphify = "graphifyy[mcp]==0.9.93"
+
+# ---------------------------------------------------------------- harnesses
+
+[harness.claude]
+name       = "Claude Code"
+root       = "C:/Users/user/.claude"
+detect     = "settings.json"
+can_gate   = true
+gate_style = "hook-json"          # stdout JSON, permissionDecision:deny, exit 0
+gate_wire  = "settings.json"      # declarative: matcher regex in config
+notes      = "B1: matcher currently omits Bash/PowerShell -> shell gating dead. Fixed in Phase 2."
+
+[harness.pi]
+name       = "pi"
+root       = "C:/Users/user/.pi"
+detect     = "agent/settings.json"
+can_gate   = true
+gate_style = "ext-return"         # return {block:true, reason}
+gate_wire  = "presence"           # dropping the dir is sufficient; no allowlist
+notes      = "Most complete gate today (shell + delegation). No native always-on instruction slot."
+
+[harness.opencode]
+name       = "opencode"
+root       = "C:/Users/user/.config/opencode"
+detect     = "opencode.json"
+config_fmt = "jsonc"              # contains real // comments; strict JSON parsers fail
+can_gate   = true
+gate_style = "plugin-throw"       # any thrown Error aborts the call
+gate_wire  = "plugin"
+notes      = "B2: tool.execute.before cannot intercept subagent calls (opencode#5894)."
+
+[harness.kiro]
+name       = "Kiro"
+root       = "C:/Users/user/.kiro"
+detect     = "steering"
+can_gate   = false                # <-- no interception point of any kind exists
+gate_style = "none"
+notes      = "Design source only. Receives unenforced instructions + MCP config as a courtesy."
+
+[harness.codex]
+name       = "Codex CLI"
+root       = "C:/Users/user/.codex"
+detect     = "config.toml"
+can_gate   = false                # Advisory until a policy-deny hook is verified end to end.
+gate_style = "none"
+gate_wire  = "hooks.json"
+notes      = "MCP and prompt hooks are projected; this matrix does not claim write-deny enforcement."
+
+[harness.gemini]
+name       = "Gemini CLI"
+root       = "C:/Users/user/.gemini"
+detect     = "GEMINI.md"
+can_gate   = false
+gate_style = "none"
+gate_wire  = "none"
+notes      = "Instruction document is generated; enforcement is unverified."
+
+[harness.hermes]
+name       = "Hermes Agent"
+root       = "C:/Users/user/AppData/Local/hermes"
+detect     = "SOUL.md"
+can_gate   = false
+gate_style = "none"
+gate_wire  = "none"
+notes      = "Instruction document is generated; enforcement is unverified."
+
+[harness.copilot]
+name = "GitHub Copilot CLI"
+root = "C:/Users/user/.copilot"
+detect = "mcp-config.json"
+can_gate = false
+gate_style = "none"
+notes = "User-level MCP projection is implemented; enforcement is not claimed."
+
+[harness.vscode]
+name = "VS Code"
+root = "C:/Users/user/AppData/Roaming/Code/User"
+detect = "mcp.json"
+can_gate = false
+gate_style = "none"
+notes = "Native user MCP projection is implemented; enforcement is not claimed."
+
+# ---------------------------------------------------------------- policy core
+
+[[cell]]
+artifact = "policy"
+harness  = "claude"
+strategy = "LINK"
+target   = "C:/Users/user/.claude/hooks/harness_policy"
+
+[[cell]]
+artifact = "policy"
+harness  = "pi"
+strategy = "LINK"
+target   = "C:/Users/user/.pi/agent/extensions/spec-gate/policy"
+
+[[cell]]
+artifact = "policy"
+harness  = "opencode"
+strategy = "LINK"
+target   = "C:/Users/user/.config/opencode/plugin/policy"
+
+[[cell]]
+artifact = "policy"
+harness  = "kiro"
+strategy = "SKIP"
+reason   = "No interception point; a policy engine with nothing to call it is dead weight."
+
+# ---------------------------------------------------------------- gate adapter
+
+[[cell]]
+artifact = "adapter"
+harness  = "claude"
+strategy = "GENERATE"
+target   = "C:/Users/user/.claude/settings.json"
+emit     = "hooks.PreToolUse entry"
+note     = "Matcher MUST include Bash|PowerShell|Task, not just Edit|Write|NotebookEdit|MultiEdit."
+
+[[cell]]
+artifact = "adapter"
+harness  = "pi"
+strategy = "GENERATE"
+target   = "C:/Users/user/.pi/agent/extensions/spec-gate/"
+emit     = "index.ts + gate.ts"
+
+[[cell]]
+artifact = "adapter"
+harness  = "opencode"
+strategy = "GENERATE"
+target   = "C:/Users/user/.config/opencode/plugin/spec-gate.ts"
+emit     = "plugin module"
+note     = "Maps task/agent -> DELEGATE so the #5894 limitation is designed for, not patched."
+
+[[cell]]
+artifact = "adapter"
+harness  = "kiro"
+strategy = "SKIP"
+reason   = "Cannot deny a tool call. Enforcement is structurally impossible here."
+
+# ---------------------------------------------------------------- instructions
+
+[[cell]]
+artifact = "instructions"
+harness  = "claude"
+strategy = "GENERATE"
+target   = "C:/Users/user/.claude/CLAUDE.md"
+emit     = "flattened always-on"
+note     = "CLAUDE.md is unconditional; inclusion:auto docs must be dropped or spilled to skills."
+
+[[cell]]
+artifact = "instructions"
+harness  = "pi"
+strategy = "GENERATE"
+target   = "C:/Users/user/.pi/agent/extensions/harness-steering/"
+emit     = "extension that injects at runtime"
+note     = "Largest GENERATE cost in the installer: pi has NO native always-on mechanism at all."
+
+[[cell]]
+artifact = "instructions"
+harness  = "opencode"
+strategy = "GENERATE"
+target   = "C:/Users/user/.config/opencode/plugin/harness-steering.ts"
+emit     = "experimental.chat.system.transform push"
+note     = "Upstream-flagged experimental; pin behaviour and fail soft if the hook disappears."
+
+[[cell]]
+artifact = "instructions"
+harness  = "kiro"
+strategy = "LINK"
+target   = "C:/Users/user/.kiro/steering"
+note     = "Native frontmatter == our interlingua, so this is the one lossless cell. Unenforced."
+
+# ---------------------------------------------------------------- agents
+
+# Every agents row below is GENERATE, produced by render_agents.py from tiers.toml (roles,
+# provider bindings, harness table). specs/test_manifest_agents.py fails if these rows and the
+# renderers disagree. `target` is the primary path written; --apply backs up first, and
+# nothing is written without it. "UNVERIFIED" here means no live probe is recorded yet in
+# tiers.toml [harness.*].verified.
+
+[[cell]]
+artifact = "agents"
+harness  = "claude"
+strategy = "GENERATE"
+target   = "C:/Users/user/.harness/claude/agents"
+emit     = "agents/*.md (frontmatter generated, body verbatim); sync-to-claude.ps1 copies them to ~/.claude/agents"
+note     = "Was recorded as LINK, but the live tree is a file copy, so the cell was wrong. Byte-exact CRLF identity is proven by --check."
+
+[[cell]]
+artifact = "agents"
+harness  = "codex"
+strategy = "GENERATE"
+target   = "C:/Users/user/.skills/codex-agents"
+emit     = "<role>-<provider>.toml per agent, plus [profiles.party_*] in ~/.codex/config.toml between marker comments"
+note     = "Probed 2026-10-08. Profiles load: `codex exec -p party_oracle_openai` sends model=gpt-6.1-sol while a plain run sends gpt-5.4. But the localhost:4000 proxy answers 'Invalid model name passed in model=gpt-5.4' and fails Codex's /responses path for Ollama models (the operator's own [profiles.local] fails identically), so no template is verified end to end: UNVERIFIED. Whether Codex loads codex-agents/*.toml itself is also UNVERIFIED. Templates: openai, ollama."
+
+[[cell]]
+artifact = "agents"
+harness  = "opencode"
+strategy = "GENERATE"
+target   = "C:/Users/user/.config/opencode/agents"
+emit     = "<role>-<provider>.md (model, mode, permission map) plus reasoning variants merged into opencode.json"
+note     = "Never touches oh-my-opencode-slim.json. Templates: openrouter, ollama. Effort is a model variant for openrouter (openai/* takes flat reasoningEffort, other vendors the nested reasoning object) and advisory for ollama. Verified 2026-10-08 with `opencode debug agent` AND `opencode run`: PONG from openrouter haiku-5.5 (low), sonnet-5.5 (low), gpt-5.6-sol (high) and from ollama qwopus 9b (6m40s cold)."
+
+[[cell]]
+artifact = "agents"
+harness  = "pi"
+strategy = "GENERATE"
+target   = "C:/Users/user/.pi/agent/agents"
+emit     = "<role>-<provider>.md read by pi-subagents (model, thinking, tools allowlist)"
+note     = "Was recorded as SKIP with a stale reason: the directory exists. Refuses a model that is not in pi's models.json. Templates: ollama, openrouter. Probed 2026-10-08: pi starts clean with the generated files present and answers (4m20s on the 2b model), but a subagent dispatch was not exercised: UNVERIFIED. The openrouter template stays unrendered until providers.openrouter (with the operator's own key) exists in models.json; the secret guard will not write a key."
+
+[[cell]]
+artifact = "agents"
+harness  = "kiro"
+strategy = "GENERATE"
+target   = "C:/Users/user/.kiro/steering/party.md"
+emit     = "instruction document (roster, models by provider, orchestration rules) as a marker block"
+note     = "Native agent format is unobservable here (agents/ is empty), so no agent files are emitted. UNVERIFIED."
+
+[[cell]]
+artifact = "agents"
+harness  = "gemini"
+strategy = "GENERATE"
+target   = "C:/Users/user/.gemini/GEMINI.md"
+emit     = "instruction document as a marker block"
+note     = "gemini CLI is not installed on this machine, so nothing here can be live-verified. UNVERIFIED."
+
+[[cell]]
+artifact = "agents"
+harness  = "hermes"
+strategy = "GENERATE"
+target   = "C:/Users/user/AppData/Local/hermes/SOUL.md"
+emit     = "instruction document as a marker block"
+note     = "Hermes specializes by profile and a delegation: block in config.yaml, which holds api keys and is never opened. UNVERIFIED."
+
+# ---------------------------------------------------------------- mcp
+
+[[cell]]
+artifact = "mcp"
+harness  = "claude"
+strategy = "GENERATE"
+target   = "C:/Users/user/.claude.json"
+note     = "Claude Code user-level mcpServers projection."
+
+[[cell]]
+artifact = "mcp"
+harness  = "pi"
+strategy = "SKIP"
+reason   = "Pi retains its installed retrieve-skills extension; no MCP config is written."
+
+[[cell]]
+artifact = "mcp"
+harness  = "opencode"
+strategy = "GENERATE"
+target   = "C:/Users/user/.config/opencode/opencode.json"
+emit     = "mcp{ type, command[], enabled }"
+polarity = "enabled"              # <-- TRUE means active
+
+[[cell]]
+artifact = "mcp"
+harness  = "kiro"
+strategy = "GENERATE"
+target   = "C:/Users/user/.kiro/settings/mcp.json"
+emit     = "mcpServers{ command, args[], disabled }"
+polarity = "disabled"             # <-- TRUE means INACTIVE. Inverted vs opencode.
+note     = "Polarity inversion is the single easiest generator bug. Conformance must cover it."
+
+[[cell]]
+artifact = "mcp"
+harness = "codex"
+strategy = "GENERATE"
+target = "C:/Users/user/.codex/config.toml"
+
+[[cell]]
+artifact = "mcp"
+harness = "copilot"
+strategy = "GENERATE"
+target = "C:/Users/user/.copilot/mcp-config.json"
+
+[[cell]]
+artifact = "mcp"
+harness = "vscode"
+strategy = "GENERATE"
+target = "C:/Users/user/AppData/Roaming/Code/User/mcp.json"
+
+[[cell]]
+artifact = "mcp"
+harness = "hermes"
+strategy = "GENERATE"
+target = "C:/Users/user/AppData/Local/hermes/config.yaml"
+note = "Native Hermes writer owns configuration access and snapshots; generic harness writes remain denied."
+
+[[cell]]
+artifact = "mcp"
+harness = "gemini"
+strategy = "SKIP"
+reason = "No Gemini MCP adapter is implemented in this harness; this is not a claim about Gemini's native capabilities."
+
+# ---------------------------------------------------------------- skills
+
+[[cell]]
+artifact = "skills"
+harness  = "claude"
+strategy = "LINK"
+target   = "C:/Users/user/.claude/skills"
+note     = "SKILL.md + frontmatter description; the only true autonomous-trigger system."
+
+[[cell]]
+artifact = "skills"
+harness  = "pi"
+strategy = "LINK"
+target   = "C:/Users/user/.pi/skills"
+note     = "Already a symlink to ~/.skills. Triggering logic unverified."
+
+[[cell]]
+artifact = "skills"
+harness  = "opencode"
+strategy = "GENERATE"
+target   = "C:/Users/user/.config/opencode/command/"
+emit     = "command/*.md"
+note     = "LOSSY: commands are user-invoked only. Autonomous triggering is not reproducible here."
+
+[[cell]]
+artifact = "skills"
+harness  = "kiro"
+strategy = "SKIP"
+reason   = "No native SKILL.md convention. But see skills_router below - Kiro reaches the store by MCP instead, and is in fact the best-served harness for retrieval."
+
+# ------------------------------------------------------- skills_router
+# CORRECTION (post-Phase-0): file-convention access and router access are
+# INDEPENDENT axes. The original `skills` row conflated them and got both
+# Kiro and opencode backwards.
+#
+# Router: http://127.0.0.1:8765, store C:/Users/user/.skills, 167 indexed.
+# Three harnesses reach it by three different transports; only Kiro uses MCP.
+
+# ---------------------------------------------------------------- lifecycle
+# Cross-session continuity: handoff (Stop) and resume (SessionStart).
+# Shared scripts in hooks/; per-harness wiring differs.
+
+[[cell]]
+artifact  = "lifecycle"
+harness   = "claude"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.claude/settings.json"
+emit      = "Stop hook + SessionStart hook entries"
+scripts   = ["hooks/session_handoff.py", "hooks/session_resume.py"]
+note      = "Stop calls session_handoff.py --mode handoff. SessionStart calls session_resume.py. Both use py310."
+
+[[cell]]
+artifact  = "lifecycle"
+harness   = "kiro"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.harness/.kiro/hooks/"
+emit      = "session-handoff-stop.json (agent Stop) + session-handoff-resume.json (command SessionStart)"
+scripts   = ["hooks/session_handoff.py", "hooks/session_resume.py"]
+note      = "Kiro Stop is agent-type (can prompt user). SessionStart is command-type (injects context)."
+
+[[cell]]
+artifact  = "lifecycle"
+harness   = "pi"
+strategy  = "GENERATE"
+target    = "C:/Users/user/Documents/dev/skills/AGENTS.md"
+emit      = "instruction block: invoke session_handoff.py at task boundaries"
+scripts   = ["hooks/session_handoff.py", "hooks/session_resume.py"]
+note      = "No native lifecycle hooks; instruction-driven via AGENTS.md shared contract."
+
+[[cell]]
+artifact  = "lifecycle"
+harness   = "opencode"
+strategy  = "GENERATE"
+target    = "C:/Users/user/Documents/dev/skills/AGENTS.md"
+emit      = "instruction block: invoke session_handoff.py at task boundaries"
+scripts   = ["hooks/session_handoff.py", "hooks/session_resume.py"]
+note      = "Shares AGENTS.md surface with pi. Same instruction-driven approach."
+
+# ---------------------------------------------------------------- test_gen
+# Automatic unit test generation after code writes (PostToolUse).
+# Shared script in hooks/test_gen.py; Kiro uses agent-type hook, Claude uses command hook.
+# Adapted from dotnet/skills code-testing-generator (Direct strategy, polyglot).
+
+[[cell]]
+artifact  = "test_gen"
+harness   = "claude"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.claude/settings.json"
+emit      = "PostToolUse hook entry for ^(Edit|Write|MultiEdit)$"
+scripts   = ["hooks/test_gen.py"]
+note      = "Emits additionalContext with test-gen instruction. Gate logic in script skips config/test/infra files."
+
+[[cell]]
+artifact  = "test_gen"
+harness   = "kiro"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.harness/.kiro/hooks/test-gen-post-write.json"
+emit      = "agent-type PostToolUse hook matching fs_write|str_replace"
+scripts   = ["hooks/test_gen.py"]
+note      = "Kiro uses agent action (prompt injection). Gate logic in prompt text, not external script."
+
+[[cell]]
+artifact  = "test_gen"
+harness   = "pi"
+strategy  = "GENERATE"
+target    = "C:/Users/user/Documents/dev/skills/AGENTS.md"
+emit      = "instruction block: run test_gen.py after writing source files"
+scripts   = ["hooks/test_gen.py"]
+note      = "Instruction-driven. No native PostToolUse hook; relies on agent discipline."
+
+[[cell]]
+artifact  = "test_gen"
+harness   = "opencode"
+strategy  = "GENERATE"
+target    = "C:/Users/user/Documents/dev/skills/AGENTS.md"
+emit      = "instruction block: run test_gen.py after writing source files"
+scripts   = ["hooks/test_gen.py"]
+note      = "Shares AGENTS.md surface with pi. Same instruction-driven approach."
+
+# ------------------------------------------------------- skills_router
+
+[[cell]]
+artifact  = "skills_router"
+harness   = "kiro"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.kiro/settings/mcp.json"
+transport = "mcp"
+status    = "WIRED"
+note      = "The only true MCP client of the four. Emit as mcpServers{url,disabled}."
+
+[[cell]]
+artifact  = "skills_router"
+harness   = "claude"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.claude/settings.json"
+transport = "hook-http"
+status    = "WIRED"
+note      = "UserPromptSubmit hook POSTs /route. Not MCP. SKILL_ROUTER_PORT env, default 8765."
+
+[[cell]]
+artifact  = "skills_router"
+harness   = "pi"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.pi/agent/extensions/retrieve-skills/"
+transport = "ext-http"
+status    = "WIRED"
+note      = "pi has no MCP client by design; proxies /route and reads SKILL.md off disk directly."
+
+[[cell]]
+artifact  = "skills_router"
+harness   = "opencode"
+strategy  = "GENERATE"
+target    = "C:/Users/user/.config/opencode/opencode.json"
+transport = "mcp"
+status    = "NOT_WIRED"
+note      = "GAP: no retrieve-skills entry at all. Worse, its existing mcp paths point at the STALE store C:/Users/user/Documents/dev/skills (164 dirs) instead of C:/Users/user/.skills (160). Both resolve, so this fails silently. Fix in Phase 3."

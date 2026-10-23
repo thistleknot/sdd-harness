@@ -20,6 +20,12 @@ R7: When Hermes sync runs, the system shall project every registry entry through
 non-interactive MCP config writer and preserve unrelated Hermes settings and MCP entries.
 R8: When native hook projections are synchronized, the system shall remove only the exact retired
 C:/Users/user/.local/bin/graphify.EXE hook commands and preserve every unrelated hook.
+R9: When target metadata is inspected, the system shall return the same native destination and disposition used by projection.
+R10: When Hermes would change an existing configuration, the system shall verify a native configuration snapshot before writing.
+R11: When Hermes projection repeats without semantic changes, the system shall perform no config write or backup.
+R12: When Hermes projection runs, the system shall preserve unowned root settings, server controls, and environment keys.
+R13: When a local server is projected to Hermes, the system shall allow the existing 240-second startup budget.
+R14: If Hermes validation, snapshot verification, or readback fails, then the system shall report failure without claiming completion.
 CLOSED: A separate OpenAI-only registry is rejected because ~/.harness is the shared
 cross-harness source. Interactive `hermes mcp add` is rejected because it performs server
 discovery and prompts; Hermes' `_save_mcp_server` is the native non-interactive writer. Scalar-only
@@ -46,6 +52,7 @@ VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 # SessionEnd has no VS Code equivalent; SubagentStart/Stop have no Claude-settings hooks to run.
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
 OPENCODE_LOCAL_TIMEOUT_MS = 240000
+HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
 RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
     "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
     "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
@@ -55,6 +62,59 @@ RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
 
 def load_harness() -> dict:
     return json.loads(HARNESS_CONFIG.read_text(encoding="utf-8"))
+
+
+def hermes_command() -> list[str]:
+    """Resolve the installed Hermes interpreter and native projection bridge.
+
+    Require: Hermes is installed in a virtual environment on PATH.
+    Guarantee: Returns argument-list execution without shell interpolation.
+    Maintain: Only Hermes' environment imports its optional native dependencies.
+    Assert: Missing interpreter or bridge fails before config access.
+    """
+    hermes = shutil.which("hermes")
+    if not hermes:
+        raise FileNotFoundError("Hermes executable was not found on PATH")
+    python = Path(hermes).with_name("python.exe" if os.name == "nt" else "python")
+    if not python.is_file() or not HERMES_BRIDGE.is_file():
+        raise FileNotFoundError("Hermes interpreter or native harness bridge is missing")
+    return [str(python), str(HERMES_BRIDGE)]
+
+
+def mcp_projection_contract(name: str) -> dict:
+    """Describe the native destination used by each existing MCP adapter.
+
+    Args:
+        name: Registered adapter target identifier.
+
+    Returns:
+        Strategy, target path, server key, and explicit SKIP reason.
+
+    Require: name appears in TARGETS.
+    Guarantee: Projection and capability reporting share native destination facts.
+    Maintain: Hermes path discovery uses its native API without reading config values.
+    Assert: Pi has an explicit SKIP; unknown targets raise KeyError.
+    """
+    if name not in TARGETS:
+        raise KeyError(name)
+    home = Path.home()
+    if name == "pi":
+        return {"strategy": "SKIP", "target": None, "key": None,
+                "reason": "Pi retains its installed retrieve-skills extension; no MCP config is written."}
+    if name == "hermes":
+        result = subprocess.run([*hermes_command(), "--config-path"], capture_output=True,
+                                text=True, check=True, timeout=30)
+        path, key = Path(json.loads(result.stdout)["path"]), "mcp_servers"
+    else:
+        path, key = {
+            "claude": (home / ".claude.json", "mcpServers"),
+            "opencode": (home / ".config" / "opencode" / "opencode.json", "mcp"),
+            "kiro": (home / ".kiro" / "settings" / "mcp.json", "mcpServers"),
+            "codex": (home / ".codex" / "config.toml", "mcp_servers"),
+            "copilot": (home / ".copilot" / "mcp-config.json", "mcpServers"),
+            "vscode": (vscode_user_dir() / "mcp.json", "servers"),
+        }[name]
+    return {"strategy": "GENERATE", "target": str(path), "key": key, "reason": ""}
 
 
 def write_server_projection(path: Path, key: str, servers: dict, *, jsonc: bool = False) -> bool:
@@ -180,7 +240,7 @@ def sync_global_hooks(config: dict, harness: str) -> None:
 
 def sync_claude_code(config: dict) -> None:
     """Update ~/.claude.json with MCP servers from harness config."""
-    claude_json = Path.home() / ".claude.json"
+    claude_json = Path(mcp_projection_contract("claude")["target"])
     servers = {}
     for name, srv in config["mcp_servers"].items():
         if srv["type"] == "http":
@@ -205,7 +265,7 @@ def sync_opencode(config: dict) -> None:
     Maintain: existing unmanaged root keys and MCP names survive the safe writer merge.
     Assert: the generated object is valid JSONC and preserves each server's transport.
     """
-    oc_json = Path.home() / ".config" / "opencode" / "opencode.json"
+    oc_json = Path(mcp_projection_contract("opencode")["target"])
     if not oc_json.exists():
         print("  opencode: config not found, skipping")
         return
@@ -216,7 +276,7 @@ def sync_opencode(config: dict) -> None:
 
     text = oc_json.read_text(encoding="utf-8")
     try:
-        data = harness_write.load_jsonc(text)
+        harness_write.load_jsonc(text)
     except harness_write.WriteError:
         print("  opencode: failed to parse config, skipping")
         return
@@ -238,7 +298,7 @@ def sync_opencode(config: dict) -> None:
 
 def sync_kiro(config: dict) -> None:
     """Update ~/.kiro/settings/mcp.json."""
-    kiro_json = Path.home() / ".kiro" / "settings" / "mcp.json"
+    kiro_json = Path(mcp_projection_contract("kiro")["target"])
     kiro_json.parent.mkdir(parents=True, exist_ok=True)
 
     servers = {}
@@ -268,13 +328,6 @@ def sync_hermes(config: dict) -> None:
     Maintain: Hermes owns serialization and validation; harness_write never opens credential files.
     Assert: every registry entry is accepted by Hermes or the subprocess fails visibly.
     """
-    hermes = shutil.which("hermes")
-    if not hermes:
-        raise FileNotFoundError("Hermes executable was not found on PATH")
-    python = Path(hermes).with_name("python.exe")
-    if not python.is_file():
-        raise FileNotFoundError(f"Hermes virtual-environment Python was not found: {python}")
-
     servers = {}
     for name, server in config["mcp_servers"].items():
         entry = {"enabled": True}
@@ -283,31 +336,25 @@ def sync_hermes(config: dict) -> None:
         else:
             entry["command"] = server["command"]
             entry["args"] = server.get("args", [])
+            entry["connect_timeout"] = OPENCODE_LOCAL_TIMEOUT_MS / 1000
             if server.get("env"):
                 entry["env"] = server["env"]
         servers[name] = entry
 
-    writer = (
-        "import json, sys\n"
-        "from hermes_cli.mcp_config import _save_mcp_server\n"
-        "payload = json.load(sys.stdin)\n"
-        "failed = [name for name, config in payload.items() if not _save_mcp_server(name, config)]\n"
-        "if failed:\n"
-        "    print(json.dumps({'rejected': failed}))\n"
-        "    raise SystemExit(1)\n"
-        "print(json.dumps({'saved': list(payload)}))\n"
-    )
     result = subprocess.run(
-        [str(python), "-c", writer],
+        hermes_command(),
         input=json.dumps(servers),
         text=True,
         capture_output=True,
         check=True,
         env=os.environ.copy(),
+        timeout=300,
     )
-    print(f"  Hermes: projected {len(servers)} servers through Hermes config writer")
-    if result.stdout.strip():
-        print(f"  Hermes writer: {result.stdout.strip()}")
+    summary = json.loads(result.stdout)
+    if set(summary["configured"]) != set(servers):
+        raise RuntimeError("Hermes projection summary omitted registry entries")
+    print(f"  Hermes: configured {len(servers)} servers; changed {len(summary['changed'])}; "
+          f"snapshot {'verified' if summary.get('snapshot') else 'not required'}")
 
 
 MCP_TOML_BEGIN = "# >>> harness mcp servers (generated by ~/.harness; edit harness.json, not this block) >>>"
@@ -349,7 +396,7 @@ def sync_codex(config: dict) -> None:
     import harness_write
 
     block = codex_mcp_block(config)
-    path = Path.home() / ".codex" / "config.toml"
+    path = Path(mcp_projection_contract("codex")["target"])
     artifact = harness_write.Artifact(path=path, text=block, mode="tomlblock",
                                       begin=MCP_TOML_BEGIN, end=MCP_TOML_END)
     changes = harness_write.plan([artifact])
@@ -405,7 +452,7 @@ def sync_codex_hooks(config: dict) -> None:
 
 def sync_github_copilot(config: dict) -> None:
     """Merge GitHub Copilot CLI MCP config at the user-level path."""
-    copilot_json = Path.home() / ".copilot" / "mcp-config.json"
+    copilot_json = Path(mcp_projection_contract("copilot")["target"])
 
     servers = {}
     for name, srv in config["mcp_servers"].items():
@@ -452,10 +499,8 @@ def sync_vscode(config: dict) -> None:
     operating core to prompts/harness-core.instructions.md, the only prompts
     file this function touches.
     """
-    vscode_json = vscode_user_dir() / "mcp.json"
+    vscode_json = Path(mcp_projection_contract("vscode")["target"])
     vscode_json.parent.mkdir(parents=True, exist_ok=True)
-    data = json.loads(vscode_json.read_text(encoding="utf-8")) if vscode_json.exists() else {}
-
     servers = {}
     for name, srv in config["mcp_servers"].items():
         if srv["type"] == "http":

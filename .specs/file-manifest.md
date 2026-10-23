@@ -94,6 +94,12 @@ gate does not fire on them, and they should be deleted, not preserved.
 | ** | agents/ | config | none | Agent definitions rendered into each harness's roster. |
 | ** | mcp/ | code | spec-attribution | MCP servers this harness registers. |
 | render_agents.py | / | code | spec-attribution | Renders `agents/` into per-harness frontmatter. |
+| harness_write.py | / | code | spec-attribution | Safe writes into live harness config: dry-run, backup, merge-only, secret and denylist guards. |
+| board.py | / | code | spec-attribution | SQLite store behind the agentic-kanban feature board: features, stories, dependencies, the story state machine, project keying. |
+| worktrees.py | / | code | spec-attribution | One git worktree per story: create, diff, merge on accept, remove on cancel. |
+| board_mcp.py | / | code | spec-attribution | The agentic-kanban MCP server: board tools over stdio, driving board.py and worktrees.py. |
+| ** | board/ | data | machine-state | board.db: the shared feature-board database, one file for every project on this machine. |
+| ** | backups/ | data | machine-state | Timestamped copies of live config files replaced by render_agents.py --apply. Disposable once the change is trusted. |
 | migrate_rules.py | / | code | spec-attribution | One-shot migration of rules between layouts. |
 | setup.py | / | code | spec-attribution | Installs the harness onto a new machine. |
 
@@ -116,6 +122,8 @@ gate does not fire on them, and they should be deleted, not preserved.
 | ** | events/ | data | machine-state | Captured lifecycle events. Machine-managed, never hand-edited. |
 | ** | slop-review/ | docs | none | Findings from instruction-surface audits. |
 | inspirations.md | / | docs | none | Sources the harness borrowed from, with what was taken. |
+| features.md | .mtp/ | docs | read-only | Source-linked feature harvest and current dispositions from five external agent repositories; change only when new source or implementation evidence supersedes a finding. |
+| features-todo.md | / | docs | named-for-intent | OPEN/DOING/DONE execution view for adopted harvested capabilities; Specs DB and kanban remain authoritative. |
 | ** | inspirations/ | docs | none | Longer notes behind `inspirations.md`. |
 | .gitignore | / | config | none | What never enters the vault. |
 

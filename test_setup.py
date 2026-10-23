@@ -1,11 +1,18 @@
-"""Unit tests for setup.py — installer helpers.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| FIXTURE | Isolate manifest, projects, and skill-store writes under tmp_path | [mandatory] | R1 |
+| PROVISION | Exercise uv command construction with a fake subprocess | [mandatory] | R2 |
+| VERIFY | Assert F: environment paths and unchanged user-owned files | [mandatory] | R2, R3 |
 
-Covers MCP entry projection per harness, skill-store seeding, and the
-discovery functions (interpreter, retrieve-skills server, harnesses).
+R1: WHEN setup helpers run in tests, they MUST NOT mutate live user paths.
+R2: MCP project environments and uv cache MUST come from runtime.mcp manifest settings.
+R3: Skill installation MUST retain existing directories and non-MCP runtime selection.
 
-All tests monkeypatch module globals (SKILL_STORE, HARNESS_ROOT, HARNESSES)
-onto tmp_path so nothing touches the real ~/.skills, ~/.claude, or the
-harness manifest.toml.
+CLOSED: Per-client MCP rendering in setup.py was removed because adapter.py already owns
+the native projections and caused the exact format divergence under test.
+
+Preconditions: pytest and TOML parsing are available.
+Failure modes: wrong environment root, project lock omission, or user-skill overwrite fail tests.
 """
 from __future__ import annotations
 
@@ -17,21 +24,15 @@ import pytest
 
 import setup as harness_setup
 from setup import (
-    build_mcp_entry,
     copy_core_skills,
     detect_harnesses,
     find_python,
     find_retrieve_skills_server,
+    mcp_runtime,
+    provision_mcp_environments,
 )
 
 PYTHON = "C:/fake/python.exe"
-
-
-@pytest.fixture
-def fake_python():
-    """Pin the interpreter so entry construction is deterministic."""
-    with patch("setup.find_python", return_value=PYTHON):
-        yield PYTHON
 
 
 @pytest.fixture
@@ -49,75 +50,6 @@ def _make_source(root: Path, names) -> Path:
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text(f"# {n}\n", encoding="utf-8")
     return src
-
-
-# ─── build_mcp_entry: HTTP servers ───────────────────────────────────────────
-
-
-def test_retrieve_skills_claude_is_bare_http_url(fake_python):
-    assert build_mcp_entry("retrieve-skills", Path("/srv"), "claude") == {
-        "url": "http://127.0.0.1:8765/mcp"
-    }
-
-
-def test_retrieve_skills_kiro_adds_disabled_false(fake_python):
-    assert build_mcp_entry("retrieve-skills", Path("/srv"), "kiro") == {
-        "url": "http://127.0.0.1:8765/mcp",
-        "disabled": False,
-    }
-
-
-def test_retrieve_skills_opencode_uses_streamable_http(fake_python):
-    assert build_mcp_entry("retrieve-skills", Path("/srv"), "opencode") == {
-        "type": "streamable-http",
-        "url": "http://127.0.0.1:8765/mcp",
-        "enabled": True,
-    }
-
-
-def test_memory_index_uses_port_8055_not_8765(fake_python):
-    assert build_mcp_entry("memory-index", Path("/srv"), "claude") == {
-        "url": "http://127.0.0.1:8055/mcp"
-    }
-    assert build_mcp_entry("memory-index", Path("/srv"), "opencode") == {
-        "type": "streamable-http",
-        "url": "http://127.0.0.1:8055/mcp",
-        "enabled": True,
-    }
-
-
-# ─── build_mcp_entry: stdio server ───────────────────────────────────────────
-
-
-def test_todo_claude_is_stdio_with_args_list(fake_python, tmp_path):
-    script = str(tmp_path / "todo_mcp.py")
-    assert build_mcp_entry("todo", tmp_path, "claude") == {
-        "type": "stdio",
-        "command": PYTHON,
-        "args": [script],
-    }
-
-
-def test_todo_opencode_folds_command_and_script_into_one_list(fake_python, tmp_path):
-    script = str(tmp_path / "todo_mcp.py")
-    assert build_mcp_entry("todo", tmp_path, "opencode") == {
-        "type": "local",
-        "command": [PYTHON, script],
-        "enabled": True,
-    }
-
-
-def test_todo_kiro_omits_type_and_uses_disabled(fake_python, tmp_path):
-    script = str(tmp_path / "todo_mcp.py")
-    assert build_mcp_entry("todo", tmp_path, "kiro") == {
-        "command": PYTHON,
-        "args": [script],
-        "disabled": False,
-    }
-
-
-def test_unknown_server_name_returns_empty_dict(fake_python, tmp_path):
-    assert build_mcp_entry("no-such-server", tmp_path, "claude") == {}
 
 
 # ─── copy_core_skills ────────────────────────────────────────────────────────
@@ -222,6 +154,13 @@ def test_detect_requires_the_marker_file_not_just_the_root(tmp_path, monkeypatch
     assert detect_harnesses() == {}
 
 
+def test_setup_covers_every_registered_adapter():
+    """Require canonical target coverage; guarantee setup can select every MCP adapter."""
+    import adapter
+
+    assert set(harness_setup.HARNESSES) == set(adapter.TARGETS)
+
+
 # ─── find_python ─────────────────────────────────────────────────────────────
 
 
@@ -250,3 +189,64 @@ def test_falls_back_when_no_manifest_is_present(tmp_path, monkeypatch):
     monkeypatch.setattr(harness_setup, "HARNESS_ROOT", tmp_path)
 
     assert find_python() == sys.executable
+
+
+def test_mcp_runtime_resolves_projects_under_manifest_root(tmp_path, monkeypatch):
+    (tmp_path / "mcp" / "todo").mkdir(parents=True)
+    (tmp_path / "manifest.toml").write_text(
+        '[runtime.mcp]\npython = "F:/base/python.exe"\n'
+        'environments_dir = "F:/Python/mcp"\ncache_dir = "F:/Python/cache"\n'
+        'tool_dir = "F:/Python/tools"\n'
+        '[runtime.mcp.projects]\ntodo = "mcp/todo"\n'
+        '[runtime.mcp.tools]\ngraphify = "graphifyy[mcp]==0.9.93"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness_setup, "HARNESS_ROOT", tmp_path)
+
+    runtime = mcp_runtime()
+
+    assert runtime["projects"] == {"todo": tmp_path / "mcp" / "todo"}
+    assert runtime["environments_dir"] == "F:/Python/mcp"
+    assert runtime["tools"] == {"graphify": "graphifyy[mcp]==0.9.93"}
+
+
+def test_provision_syncs_locked_projects_to_manifest_environment(tmp_path, monkeypatch):
+    project = tmp_path / "mcp" / "todo"
+    project.mkdir(parents=True)
+    (project / "pyproject.toml").write_text("[project]\nname='todo'\n", encoding="utf-8")
+    (project / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    base = tmp_path / "base-python.exe"
+    base.touch()
+    runtime = {
+        "python": str(base),
+        "environments_dir": str(tmp_path / "F" / "mcp"),
+        "cache_dir": str(tmp_path / "F" / "cache"),
+        "tool_dir": str(tmp_path / "F" / "tools"),
+        "projects": {"todo": project},
+        "tools": {"graphify": "graphifyy[mcp]==0.9.93"},
+    }
+    monkeypatch.setattr(harness_setup, "mcp_runtime", lambda: runtime)
+    calls = []
+
+    def fake_run(args, check, env):
+        calls.append((args, check, env))
+        if args[1] == "sync":
+            environment = Path(env["UV_PROJECT_ENVIRONMENT"])
+            (environment / "Scripts").mkdir(parents=True, exist_ok=True)
+            (environment / "Scripts" / "python.exe").touch()
+        else:
+            tool_exe = Path(env["UV_TOOL_BIN_DIR"]) / "graphify.exe"
+            tool_exe.parent.mkdir(parents=True, exist_ok=True)
+            tool_exe.touch()
+
+    monkeypatch.setattr(harness_setup.subprocess, "run", fake_run)
+
+    installed = provision_mcp_environments()
+
+    assert installed["todo"].startswith(str(tmp_path / "F" / "mcp"))
+    assert calls[0][0][1:3] == ["sync", "--project"]
+    assert calls[0][2]["UV_CACHE_DIR"] == str(tmp_path / "F" / "cache")
+    assert "--tool-dir" not in calls[1][0]
+    assert calls[1][2]["UV_TOOL_DIR"] == str(tmp_path / "F" / "tools")
+    assert calls[1][2]["UV_TOOL_BIN_DIR"] == str(tmp_path / "F" / "tools" / "bin")
+    assert installed["graphify"] == str(tmp_path / "F" / "tools" / "bin" / "graphify.exe")

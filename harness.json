@@ -15,7 +15,7 @@
     },
     "data-science-skills": {
       "type": "stdio",
-      "command": "c:/users/user/py310/Scripts/python.exe",
+      "command": "F:/Python/mcp/data-science-skills/Scripts/python.exe",
       "args": ["C:/Users/user/.skills/parallel-rrf-graph-rag-hybrid-cascade-mmr-late-retriever/scripts/mcp_server.py"],
       "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     },
@@ -25,24 +25,24 @@
     },
     "graphify": {
       "type": "stdio",
-      "command": "C:/Users/user/.local/bin/graphify-mcp.exe",
+      "command": "F:/Python/uv-tools/bin/graphify-mcp.exe",
       "args": [],
       "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     },
     "agentic-kanban": {
       "type": "stdio",
-      "command": "c:/users/user/py310/Scripts/python.exe",
+      "command": "F:/Python/mcp/agentic-kanban/Scripts/python.exe",
       "args": ["C:/Users/user/.harness/board_mcp.py"],
       "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     }
   },
   "global_hooks": {
     "claude": [
-      {"event": "PreToolUse", "matcher": "Bash|Grep", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard search", "timeout": 10},
-      {"event": "PreToolUse", "matcher": "Read|Glob", "command": "C:/Users/user/.local/bin/graphify.EXE hook-guard read", "timeout": 10}
+      {"event": "PreToolUse", "matcher": "Bash|Grep", "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard search", "timeout": 10},
+      {"event": "PreToolUse", "matcher": "Read|Glob", "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard read", "timeout": 10}
     ],
     "codex": [
-      {"event": "PreToolUse", "matcher": "Bash", "command": "C:/Users/user/.local/bin/graphify.EXE hook-check"}
+      {"event": "PreToolUse", "matcher": "Bash", "command": "F:/Python/uv-tools/bin/graphify.EXE hook-check"}
     ]
   },
   "model_routing": {

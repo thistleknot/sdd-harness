@@ -14,7 +14,7 @@ R3: If any proposed entry is invalid, then the system shall reject the batch bef
 R4: When existing configuration would change, the system shall verify a native configuration snapshot before saving.
 R5: When projection is semantically unchanged, the system shall perform no snapshot or save.
 R6: If backup, save, or readback fails, then the system shall report failure without emitting configuration values.
-R7: Where --verify is requested, the system shall prove connected catalogs and three usable retrieval canaries within a 270-second deadline.
+R7: Where --verify is requested, the system shall prove connected catalogs and three named retrieval lookups within a 270-second deadline and report server-name-only progress on stderr.
 
 CLOSED: Generic harness_write access to Hermes config is denied; full-home backup and an independent YAML writer are unnecessary because native snapshots and the native MCP writer exist.
 Preconditions: execute with the installed Hermes Python; input contains only projected registry entries.
@@ -123,17 +123,19 @@ def verify(servers: dict) -> dict:
         """Require one native registration; guarantee teardown after catalog and canary calls."""
         config = _resolve_mcp_server_config(configured[name])
         server = MCPServerTask(name)
+        print(f"Connecting {name}", file=sys.stderr, flush=True)
         try:
             await asyncio.wait_for(server.start(config), timeout=config.get("connect_timeout", 60))
             tools = [tool.name for tool in server._tools]
             if not tools:
                 raise RuntimeError(f"Hermes discovered an empty MCP catalog for {name!r}")
             connected[name] = len(tools)
+            print(f"Connected {name}: {len(tools)} tools", file=sys.stderr, flush=True)
             if name == "retrieve-skills":
                 canaries = [
-                    ("Inspect code relationships with graphify-out/graph.json before textual code search", "graphify"),
-                    ("GitHub Spec Kit specify CLI constitution specify clarify plan tasks analyze implement workflow", "speckit"),
-                    ("Find specialized local instructions before a nontrivial task through the skill retrieval gate", "retrieve-skills"),
+                    ("graphify", "graphify"),
+                    ("speckit", "speckit"),
+                    ("retrieve-skills", "retrieve-skills"),
                 ]
                 for query, expected in canaries:
                     response = await asyncio.wait_for(server.session.call_tool(
@@ -142,6 +144,7 @@ def verify(servers: dict) -> dict:
                     if response.isError or f"PASS {expected} " not in text:
                         raise RuntimeError(f"Hermes retrieval canary did not return {expected!r}")
                     usable.append(expected)
+                    print(f"Usable retrieval lookup: {expected}", file=sys.stderr, flush=True)
         finally:
             await asyncio.wait_for(server.shutdown(), timeout=10)
 

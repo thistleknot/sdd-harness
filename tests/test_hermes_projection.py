@@ -179,6 +179,7 @@ def test_native_probe_separates_connection_and_usability_and_always_closes(nativ
         async def call_tool(self, name, arguments):
             """Return varied deterministic retrieval evidence without network access."""
             expected = ["graphify", "speckit", "retrieve-skills"][self.called]
+            assert name == "retrieve_skills" and arguments == {"query": expected, "k": 3}
             self.called += 1
             text = "PASS unrelated " if failure == "canary" else f"PASS {expected} "
             return SimpleNamespace(isError=False, content=[SimpleNamespace(text=text)])

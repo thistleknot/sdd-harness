@@ -12,6 +12,9 @@ EARS guards:
 - R3: Each generated MCP cell requires a target registered in adapter.TARGETS.
 - R4: Every registered MCP server must have a supported adapter projection or an explicit SKIP disposition.
 - R5: Skill targets, plugin entrypoints, and global hook adapters must resolve without reading credentials.
+- R6: When the matrix is checked, the system shall reject missing or duplicate MCP cells for registered adapter targets.
+- R7: When a generated MCP cell is checked, the system shall compare its destination with native adapter metadata.
+- R8: When a declared harness has no implemented MCP adapter, the system shall require an explicit SKIP reason.
 
 CLOSED:
 - A second capability registry was rejected; manifest.toml remains the capability source and
@@ -23,7 +26,9 @@ Failure modes: Parse errors are raised; detected drift returns exit status 1.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
+import os
 from pathlib import Path
 
 import adapter
@@ -50,7 +55,7 @@ def build_report(root: Path = ROOT) -> tuple[list[str], list[str]]:
     Require: Both registry files are readable and structurally valid.
     Guarantee: The inspection reads files and adapter declarations only.
     Maintain: manifest.toml and harness.json remain their respective source registries.
-    Assert: A supported disposition and a SKIP disposition are represented in output.
+    Assert: Every registered adapter and declared harness has exactly one MCP disposition.
     """
     with (root / "manifest.toml").open("rb") as stream:
         manifest = tomllib.load(stream)
@@ -61,37 +66,41 @@ def build_report(root: Path = ROOT) -> tuple[list[str], list[str]]:
     hooks = config.get("global_hooks", {})
     lines = [f"Registered MCP servers: {len(servers)}"]
     issues: list[str] = []
-    supported = False
-    skipped = False
+    declared = manifest.get("harness", {})
+    counts = Counter(cell["harness"] for cell in cells)
+    for name in sorted(set(adapter.TARGETS) | set(declared)):
+        if counts[name] == 0:
+            issues.append(f"{name}: missing MCP disposition")
+        elif counts[name] > 1:
+            issues.append(f"{name}: duplicate MCP dispositions ({counts[name]})")
 
     for cell in cells:
         name = cell["harness"]
         strategy = cell["strategy"]
         target = adapter.TARGETS.get(name)
+        if name not in declared:
+            issues.append(f"{name}: MCP harness is not declared in manifest.toml")
+        contract = adapter.mcp_projection_contract(name) if target is not None else None
         if strategy == "SKIP":
-            skipped = True
             reason = cell.get("reason", "").strip()
             if not reason:
                 issues.append(f"{name}: SKIP has no reason")
-            if target is None:
-                issues.append(f"{name}: SKIP harness has no adapter target")
-            elif not any(
-                evidence in (target.__doc__ or "")
-                for evidence in ("no MCP config written", "does not load these MCP entries")
-            ):
-                issues.append(f"{name}: SKIP is not documented by its adapter")
+            if contract and contract["strategy"] != "SKIP":
+                issues.append(f"{name}: SKIP contradicts its native MCP adapter")
             lines.append(f"SKIP {name}: {reason or 'missing reason'}")
             continue
 
-        supported = True
         if strategy not in {"LINK", "GENERATE"}:
             issues.append(f"{name}: unsupported strategy {strategy!r}")
         if not cell.get("target", "").strip():
             issues.append(f"{name}: generated MCP capability has no target")
         if target is None:
             issues.append(f"{name}: no adapter target registered")
-        elif "no MCP config written" in (target.__doc__ or ""):
-            issues.append(f"{name}: manifest says {strategy}, adapter writes no MCP config")
+        elif contract["strategy"] != strategy:
+            issues.append(f"{name}: manifest strategy {strategy} differs from native {contract['strategy']}")
+        elif os.path.normcase(os.path.normpath(str(Path(cell.get("target", "")).expanduser()))) != os.path.normcase(
+                os.path.normpath(contract["target"])):
+            issues.append(f"{name}: destination differs from native adapter: {contract['target']}")
         lines.append(f"{strategy} {name}: {cell.get('target', '(no target)')}")
 
     for server_name, server in sorted(servers.items()):
@@ -141,10 +150,7 @@ def build_report(root: Path = ROOT) -> tuple[list[str], list[str]]:
     generated_harnesses = {cell["harness"] for cell in cells if cell["strategy"] != "SKIP"}
     if servers and not generated_harnesses:
         issues.append("harness.json has servers but the manifest has no generated MCP projection")
-    if not supported:
-        issues.append("manifest contains no supported MCP capability example")
-    if not skipped:
-        issues.append("manifest contains no explicit MCP SKIP example")
+    lines.append("REPORT_SCOPE: configuration declarations and artifacts; native connections are not tested")
     return lines, issues
 
 

@@ -1,6 +1,6 @@
 # Memory and harness integration
 
-CURRENT 2026-11-02: R23-R26 add client-scoped skill projection; Codex and Claude use the shared skills index, so indexing updates availability for every existing router client. The separate memory evaluation OPEN list is unchanged.
+CURRENT 2026-11-02: R27-R28 add Codex's native user-skill file projection alongside its shared MCP route. The common skill lifecycle stays canonical; installation, invocation and discovery checks follow each host. The separate memory evaluation OPEN list is unchanged.
 
 HISTORICAL STATUS: 2026-10-25 implementation and service-health details are preserved in [the dated archive](history/memory-and-harness-integration-2026-10-25.md).
 
@@ -11,7 +11,7 @@ HISTORICAL STATUS: 2026-10-25 implementation and service-health details are pres
 | DERIVE | Version individual memory records in the existing SQLite store | [mandatory] R2-R4 |
 | RECALL | Filter scope before bounded lexical ranking and source opening | [mandatory] R5-R8 |
 | CONTINUE | Resume only a matching project handoff | [mandatory] R9 |
-| EXPORT | Plan/apply/check selected canonical skill packages | [mandatory] R10-R12, R23-R26 |
+| EXPORT | Plan/apply/check selected canonical skill packages for native files and MCP routes | [mandatory] R10-R12, R23-R28 |
 | EVOLVE | Implement offline mining and checkpointed evaluation gates | [mandatory] R13-R16 |
 | VERIFY | Run bounded deterministic checks after implementation | [contract] R17-R18 |
 
@@ -36,6 +36,9 @@ HISTORICAL STATUS: 2026-10-25 implementation and service-health details are pres
 - R25: WHEN apply completes with selected router clients, the adapter MUST confirm selected skill membership in the shared index.
 - R26: WHEN skill sync refreshes the canonical retrieval index, the adapter MUST report that index visibility is shared across its clients.
   - Given `--client codex claude`, When apply completes, Then no Copilot/OpenCode/Hermes/Pi skill copy is written and the skill is indexed for the selected Codex and Claude routes.
+- R27: WHEN Codex is selected, the adapter MUST copy each selected canonical package additively to `$HOME/.agents/skills/<name>` and check every package resource at that destination. A shared retrieval index MUST NOT count as Codex's native skill installation.
+- R28: WHEN capability drift checks Codex skills, the declared projection MUST identify both native file copy and MCP route transports while using `$HOME/.agents/skills` as the skill destination. Router membership remains a separate shared-index check.
+  - Given a valid canonical skill and `--client codex`, When apply completes, Then Codex's native skill files are present under `$HOME/.agents/skills/<name>` and its configured retrieval route remains independently checked.
 - R12: ~/.skills MUST be the master; reconciliation MUST preserve divergent and unique legacy content before export, and skill synchronization MUST NOT load the full library into Claude natively.
 - R13: The runner MUST implement mine/run/verdict with dry execution by default, explicit model execution, call/token/time caps and resumable SQLite checkpoints.
 - R14: The evaluator MUST be hashed; held-out outputs MUST NOT reach proposer views; invalid or incomplete runs MUST be NOT TESTED.

@@ -44,6 +44,8 @@ R15: WHERE --client is supplied, skill sync MUST write only selected copy target
 R16: WHERE --client is supplied, skill sync MUST validate only selected router targets.
 R17: WHEN apply completes with selected router clients, skill sync MUST confirm selected skill membership in the shared index.
 R18: WHEN skill sync refreshes the canonical retrieval index, it MUST report that visibility is shared across its clients.
+R19: WHEN Codex is selected, skill sync MUST copy selected packages to `$HOME/.agents/skills` and verify every resource there; shared-index membership MUST NOT count as native installation.
+R20: WHEN capability drift checks Codex skills, the declared transport MUST include native copy and MCP, with the native skill directory as its target.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
@@ -79,6 +81,12 @@ VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
 OPENCODE_LOCAL_TIMEOUT_MS = 240000
 HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
+BACKUP_RUN = Path.home() / '.harness/backups' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + uuid4().hex[:8])
+SKILL_COPY_TARGETS = {'codex': '.agents/skills', 'copilot': '.copilot/skills', 'opencode': '.config/opencode/skills',
+                      'hermes': '.hermes/skills', 'pi': '.pi/skills'}
+SKILL_ROUTER_TARGETS = ('claude', 'codex', 'kiro', 'vscode')
+SKILL_EXCLUDES = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.benchmarks',
+                  'node_modules', '.tmp', '.chroma', 'backups', '.ruff_cache'}
 RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
     "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
     "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
@@ -602,14 +610,25 @@ def skill_package_files(package: Path) -> list[Path]:
 
 
 def skill_projection_contract(name: str, home: Path | None = None) -> dict:
-    """Describe copy/router destinations from the same facts used by export.
+    """Describe every skill delivery surface supported by a harness.
 
-    Require: a supported harness name.
-    Guarantee: capability reporting and projection agree.
-    Maintain: Claude does not receive the entire library as native skills.
-    Assert: unsupported harnesses are explicit.
+    Args:
+        name: Supported native harness identifier.
+        home: Optional user home used to resolve native destinations.
+
+    Returns:
+        Strategy, transport, and destination metadata shared with capability
+        drift checks.
+
+    Require: ``name`` identifies a supported native harness.
+    Guarantee: Capability reporting includes each supported transport.
+    Maintain: Claude does not receive the whole library as native skills.
+    Assert: Unsupported harnesses remain explicit SKIP projections.
     """
     home = home or Path.home()
+    if name in SKILL_COPY_TARGETS and name in SKILL_ROUTER_TARGETS:
+        return {'strategy': 'GENERATE', 'transport': 'copy+mcp',
+                'target': str(home / SKILL_COPY_TARGETS[name])}
     if name in SKILL_COPY_TARGETS:
         return {'strategy': 'GENERATE', 'transport': 'copy', 'target': str(home / SKILL_COPY_TARGETS[name])}
     if name in SKILL_ROUTER_TARGETS:

@@ -25,6 +25,20 @@ Default to the second.
 
 ---
 
+## From #12 — AI Unified Process on Codex
+
+> Source: [the user-provided Codex setup screenshot and transcription](../inspirations/sources/2026-11-02-aiup-codex-deployment.md), with current details checked against the [official Codex skills guide](https://developers.openai.com/codex/skills), [AIUP Tessl guide](https://github.com/AI-Unified-Process/marketplace/blob/main/docs/installation/tessl.md), and [AIUP manual guide](https://github.com/AI-Unified-Process/marketplace/blob/main/docs/installation/other-agents.md).
+
+- **INSP-12.1** — Keep the process contract shared across harnesses; adapt only the host's installation, invocation, and verification steps. Spec Kit's constitution → specify → clarify → plan → tasks → analyze → implement sequence remains one lifecycle.
+- **INSP-12.2** — A shared skill source or retrieval index does not prove host-native installation. Verify each client through its own discovery surface after delivery.
+- **INSP-12.3** — Codex local skill delivery uses its supported skill directories (`$HOME/.agents/skills` for user scope or `.agents/skills` for repository scope); a Claude `/plugin` action does not install a Codex skill.
+- **INSP-12.4** — Treat install commands and package-specific instructions in a screenshot as source claims, not settled procedure, when the source itself marks them unverified. Check the current upstream installation guide before adoption.
+- **INSP-12.5** — Report delivery as separate outcomes: canonical source validated, host-specific files or plugin installed, client discovery confirmed, and any shared MCP index refreshed. Do not collapse them into one "deployed" result.
+
+The screenshot's `~/.codex/skills/` path is not promoted as canonical. Current OpenAI docs specify `$HOME/.agents/skills` and `.agents/skills`; current AIUP docs confirm `tessl init --agent codex` and `ai-unified-process/aiup-core`, while the project selects its own layer packages and dependencies.
+
+## From #11 — salient_grams (operator's own code)
+
 ## From #1 — Delete your CLAUDE.md (Charlie Hills)
 
 > Source: `~/Documents/wiki/data science/llm/Delete your CLAUDE-md.md`

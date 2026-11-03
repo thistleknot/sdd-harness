@@ -1,7 +1,7 @@
 """| Stage | Mechanism | Contract |
-| CHECK | Validate selected skill router registrations without writes | [mandatory] R10-R12, R23-R26 |
+| CHECK | Validate selected native skill projections and router registrations without writes | [mandatory] R10-R12, R23-R28 |
 
-Spec: docs/playbooks/memory-and-harness-integration.md R10-R12, R23-R26.
+Spec: docs/playbooks/memory-and-harness-integration.md R10-R12, R23-R28.
 CLOSED: treating a matching URL as usable when the native client disables it.
 Preconditions: isolated native config fixture.
 Failures: stale, missing or disabled registrations are reported by target.
@@ -10,6 +10,21 @@ import json
 from pathlib import Path
 
 import adapter
+
+
+def test_codex_projection_copies_skills_and_keeps_router_transport(tmp_path, monkeypatch):
+    """Require: Codex is both a file-copy and MCP client; Guarantee: native location is explicit."""
+    monkeypatch.setattr(adapter.Path, 'home', classmethod(lambda cls: tmp_path))
+
+    projection = adapter.skill_projection_contract('codex')
+
+    assert projection == {
+        'strategy': 'GENERATE',
+        'transport': 'copy+mcp',
+        'target': str(tmp_path / '.agents' / 'skills'),
+    }
+    assert 'codex' in adapter.SKILL_ROUTER_TARGETS
+    assert adapter.SKILL_COPY_TARGETS['codex'] == '.agents/skills'
 
 
 def test_disabled_router_is_reported_even_when_url_matches(tmp_path, monkeypatch):
@@ -61,11 +76,10 @@ def test_selected_router_clients_do_not_write_copy_targets(tmp_path, monkeypatch
     monkeypatch.setattr(adapter, '_skill_router_issues',
                         lambda config, root, names, *, indexed, targets=None: checked.extend(targets or ()) or [])
 
-    result = adapter.sync_skills({}, ['demo'], check=True, master=master, clients=['claude', 'codex'])
+    result = adapter.sync_skills({}, ['demo'], check=True, master=master, clients=['claude', 'kiro'])
     output = capsys.readouterr().out
 
     assert result == 0
-    assert checked == ['claude', 'codex']
+    assert checked == ['claude', 'kiro']
     assert not any((tmp_path / relative).exists() for relative in adapter.SKILL_COPY_TARGETS.values())
     assert 'shared index visibility is global' in output
-

@@ -351,31 +351,67 @@ reason = "No Gemini MCP adapter is implemented in this harness; this is not a cl
 
 [[cell]]
 artifact = "skills"
-harness  = "claude"
-strategy = "LINK"
-target   = "C:/Users/user/.claude/skills"
-note     = "SKILL.md + frontmatter description; the only true autonomous-trigger system."
-
-[[cell]]
-artifact = "skills"
-harness  = "pi"
-strategy = "LINK"
-target   = "C:/Users/user/.pi/skills"
-note     = "Already a symlink to ~/.skills. Triggering logic unverified."
-
-[[cell]]
-artifact = "skills"
-harness  = "opencode"
+harness = "copilot"
 strategy = "GENERATE"
-target   = "C:/Users/user/.config/opencode/command/"
-emit     = "command/*.md"
-note     = "LOSSY: commands are user-invoked only. Autonomous triggering is not reproducible here."
+transport = "copy"
+target = "C:/Users/user/.copilot/skills"
+note = "Canonical ~/.skills; selected additive package export."
 
 [[cell]]
 artifact = "skills"
-harness  = "kiro"
-strategy = "SKIP"
-reason   = "No native SKILL.md convention. But see skills_router below - Kiro reaches the store by MCP instead, and is in fact the best-served harness for retrieval."
+harness = "opencode"
+strategy = "GENERATE"
+transport = "copy"
+target = "C:/Users/user/.config/opencode/skills"
+note = "Canonical ~/.skills; selected additive package export."
+
+[[cell]]
+artifact = "skills"
+harness = "hermes"
+strategy = "GENERATE"
+transport = "copy"
+target = "C:/Users/user/.hermes/skills"
+note = "Canonical ~/.skills; selected additive package export."
+
+[[cell]]
+artifact = "skills"
+harness = "pi"
+strategy = "GENERATE"
+transport = "copy"
+target = "C:/Users/user/.pi/skills"
+note = "Canonical ~/.skills; selected additive package export."
+
+[[cell]]
+artifact = "skills"
+harness = "claude"
+strategy = "GENERATE"
+transport = "mcp"
+target = "C:/Users/user/.claude.json"
+note = "Canonical ~/.skills; selected additive package export."
+
+[[cell]]
+artifact = "skills"
+harness = "codex"
+strategy = "GENERATE"
+transport = "copy+mcp"
+target = "C:/Users/user/.agents/skills"
+note = "Canonical ~/.skills; selected additive package export plus shared MCP indexing."
+
+[[cell]]
+artifact = "skills"
+harness = "kiro"
+strategy = "GENERATE"
+transport = "mcp"
+target = "C:/Users/user/.kiro/settings/mcp.json"
+note = "Canonical ~/.skills; selected additive package export."
+
+[[cell]]
+artifact = "skills"
+harness = "vscode"
+strategy = "GENERATE"
+transport = "mcp"
+target = "C:/Users/user/AppData/Roaming/Code/User/mcp.json"
+note = "Canonical ~/.skills; selected additive package export."
 
 # ------------------------------------------------------- skills_router
 # CORRECTION (post-Phase-0): file-convention access and router access are

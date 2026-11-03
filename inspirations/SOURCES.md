@@ -10,6 +10,7 @@ Golden-source archive: `~/.skills/integrated/` (est. commit `7925d67`, 2026-05-1
 
 | # | Inspiration | Immutable source | Curated extract | Status |
 |---|---|---|---|---|
+| 12 | **AI Unified Process setup for Codex** — user-provided screenshot, 2026-11-02 | `inspirations/sources/2026-11-02-aiup-codex-guidance.png` + transcription `2026-11-02-aiup-codex-deployment.md`; current technical cross-checks: [OpenAI Codex skill guide](https://developers.openai.com/codex/skills), [AIUP Tessl guide](https://github.com/AI-Unified-Process/marketplace/blob/main/docs/installation/tessl.md), [AIUP manual guide](https://github.com/AI-Unified-Process/marketplace/blob/main/docs/installation/other-agents.md) | `specs/inspirations.md` INSP-12.* | SCREENSHOT VERIFIED; screenshot's paths/package command were unverified, current upstream docs now checked |
 | 1 | **Delete your CLAUDE.md** — Charlie Hills, 2026-08-09 | `~/Documents/wiki/data science/llm/Delete your CLAUDE-md.md` (+ `.pdf` `.json` `.csv` `_methods.md` `_table_crops/`) | not yet archived | VERIFIED |
 | 2 | **llm-wiki** (Karpathy) | *no upstream found in `~/Documents/wiki`* | `~/.skills/integrated/llm-wiki.md`, `llm-wiki.txt`, `llm-wiki-pattern-topology.md` | UNVERIFIED upstream |
 | 3 | **llm-wiki v2 / GBrain** | `~/Documents/wiki/data science/llm/RAG, LLM Wiki, or Gbrain-  How Your Agent Remembers Changes Everything.md` (+ `.pdf` `.json` `.csv`); also `RAG LLM Wiki or GBrain.*` | `~/.skills/integrated/` (both titles) | VERIFIED |

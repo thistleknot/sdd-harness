@@ -1,4 +1,11 @@
-"""Cross-harness MCP projection from the ~/.harness registry.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Plan/apply/check selected canonical skill packages | [mandatory] R10-R12, R23-R26 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R10-R12, R23-R26.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+Cross-harness MCP projection from the ~/.harness registry.
 
 Pipeline:
 | Stage | Mechanism | Tag | Requirements |
@@ -33,18 +40,37 @@ discovery and prompts; Hermes' `_save_mcp_server` is the native non-interactive 
 Pi MCP projection is rejected because the installed Pi integration is its retrieval extension,
 not an MCP client.
 
+R15: WHERE --client is supplied, skill sync MUST write only selected copy targets.
+R16: WHERE --client is supplied, skill sync MUST validate only selected router targets.
+R17: WHEN apply completes with selected router clients, skill sync MUST confirm selected skill membership in the shared index.
+R18: WHEN skill sync refreshes the canonical retrieval index, it MUST report that visibility is shared across its clients.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
+import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.request import Request, urlopen
+from uuid import uuid4
+import yaml
+
+import harness_write
+from scripts.validate_skills import validate_skill
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 HARNESS_CONFIG = Path(__file__).parent / "harness.json"
 HARNESS_AGENTS = Path(__file__).parent / "claude" / "AGENTS.md"
@@ -547,8 +573,216 @@ def sync_vscode_hooks() -> None:
         }]
         for event in VSCODE_HOOK_EVENTS
     }
-    hooks_json.write_text(json.dumps({"hooks": hooks}, indent=2), encoding="utf-8")
+    harness_write.apply(harness_write.plan([harness_write.Artifact(hooks_json, json.dumps({"hooks": hooks}, indent=2))]), BACKUP_RUN)
     print(f"  VS Code: updated {hooks_json} ({len(hooks)} events via shim)")
+
+
+def skill_package_files(package: Path) -> list[Path]:
+    """Enumerate owned package resources, including binary assets but excluding runtime state.
+
+    Require: package is a canonical skill directory.
+    Guarantee: no symlink escape, credential file, model cache or runtime DB is copied.
+    Maintain: stable order and byte identity.
+    Assert: package identity is validated before projection.
+    """
+    root = package.resolve()
+    result = []
+    for path in sorted(package.rglob('*')):
+        relative = path.relative_to(package)
+        if not path.is_file() or any(part in SKILL_EXCLUDES for part in relative.parts):
+            continue
+        if path.suffix.lower() in {'.pyc', '.db', '.sqlite3', '.log', '.lock'} or path.name in {'.env', 'uv.lock', 'package-lock.json'}:
+            continue
+        if not path.resolve().is_relative_to(root):
+            raise ValueError(f'skill resource escapes package: {relative}')
+        if harness_write.denied(path):
+            raise ValueError(f'protected configuration is not a skill resource: {relative}')
+        result.append(path)
+    return result
+
+
+def skill_projection_contract(name: str, home: Path | None = None) -> dict:
+    """Describe copy/router destinations from the same facts used by export.
+
+    Require: a supported harness name.
+    Guarantee: capability reporting and projection agree.
+    Maintain: Claude does not receive the entire library as native skills.
+    Assert: unsupported harnesses are explicit.
+    """
+    home = home or Path.home()
+    if name in SKILL_COPY_TARGETS:
+        return {'strategy': 'GENERATE', 'transport': 'copy', 'target': str(home / SKILL_COPY_TARGETS[name])}
+    if name in SKILL_ROUTER_TARGETS:
+        return {'strategy': 'GENERATE', 'transport': 'mcp', 'target': mcp_projection_contract(name)['target']}
+    return {'strategy': 'SKIP', 'transport': None, 'target': None, 'reason': 'No implemented skill projection for this harness.'}
+
+
+def reconcile_skill_master(master: Path, *, apply: bool = False) -> dict:
+    """Preserve unique/divergent legacy resources before canonical export.
+
+    Require: caller explicitly chose reconciliation; canonical content wins collisions.
+    Guarantee: unique resources are imported; conflicts are archived; unsafe packages are reported and skipped.
+    Maintain: no deletions, LLM merges or whole-directory mirroring.
+    Assert: every conflicting resource has a provenance report and backup.
+    """
+    home = Path.home()
+    roots = [home / 'Documents/dev/skills', *[home / p for p in SKILL_COPY_TARGETS.values()], home / '.claude/skills']
+    report = {'master': str(master), 'imported': [], 'preserved': [], 'skipped': []}
+    for index, legacy in enumerate(roots):
+        if not legacy.is_dir() or legacy.resolve() == master.resolve():
+            continue
+        for skill in sorted(legacy.glob('*/SKILL.md')):
+            package = skill.parent
+            try:
+                resources = skill_package_files(package)
+            except ValueError as exc:
+                report['skipped'].append({'source': str(package), 'reason': str(exc)})
+                continue
+            for path in resources:
+                relative = Path(package.name) / path.relative_to(package)
+                destination = master / relative
+                content = path.read_bytes()
+                if not destination.exists():
+                    report['imported'].append({'source': str(path), 'target': str(destination)})
+                    if apply:
+                        harness_write.write_bytes(destination, content, BACKUP_RUN / 'canonical')
+                elif destination.read_bytes() != content:
+                    archived = BACKUP_RUN / 'legacy' / str(index) / relative
+                    report['preserved'].append({'source': str(path), 'backup': str(archived), 'sha256': hashlib.sha256(content).hexdigest()})
+                    if apply:
+                        harness_write.write_bytes(archived, content, BACKUP_RUN / 'legacy-backups')
+    if apply:
+        harness_write.write_bytes(BACKUP_RUN / 'reconciliation.json', json.dumps(report, indent=2).encode(), BACKUP_RUN / 'reports')
+    return report
+
+
+def _skill_router_issues(config: dict, master: Path, names: list[str], *, indexed: bool,
+                         targets: tuple[str, ...] | None = None) -> list[str]:
+    """Inspect selected named-skill router access without model calls or secret output.
+
+    Args:
+        config: Canonical harness registry.
+        master: Canonical skill store.
+        names: Selected skill directory names.
+        indexed: Whether canonical index membership must be checked.
+        targets: Router clients to inspect; defaults to every registered router client.
+
+    Returns:
+        Findings for missing, stale, disabled, or unindexed selected routes.
+
+    Require: Native router destinations are registered.
+    Guarantee: Only the selected router destinations are checked.
+    Maintain: Checks are read-only and never trigger reindex.
+    Assert: A file copy alone cannot establish router availability.
+    """
+    issues = []
+    expected = config['mcp_servers']['retrieve-skills']['url']
+    for target in targets if targets is not None else SKILL_ROUTER_TARGETS:
+        contract = mcp_projection_contract(target)
+        path = Path(contract['target'])
+        if not path.is_file():
+            issues.append(f'{target}: missing router configuration')
+            continue
+        raw = path.read_text(encoding='utf-8-sig')
+        data = tomllib.loads(raw) if path.suffix == '.toml' else harness_write.load_jsonc(raw)
+        server = data.get(contract['key'], {}).get('retrieve-skills', {})
+        if server.get('url') != expected:
+            issues.append(f'{target}: retrieve-skills URL differs from canonical registry')
+        if server.get('disabled') is True or server.get('enabled') is False:
+            issues.append(f'{target}: retrieve-skills is disabled')
+    if indexed:
+        db_path = master / 'retrieve-skills/index.db'
+        if not db_path.is_file():
+            return issues + ['retrieve-skills: index is missing']
+        conn = sqlite3.connect(db_path.resolve().as_uri() + '?mode=ro', uri=True)
+        try:
+            for name in names:
+                path = master / name / 'SKILL.md'
+                front = yaml.safe_load(path.read_text(encoding='utf-8-sig').split('---', 2)[1])
+                row = conn.execute('SELECT path,description FROM skills WHERE name=?', (name,)).fetchone()
+                if not row or Path(row[0]).resolve() != path.resolve() or row[1].strip() != str(front['description']).strip():
+                    issues.append(f'retrieve-skills: missing/stale canonical index entry for {name}')
+        finally:
+            conn.close()
+    return issues
+
+
+def sync_skills(config: dict, names: list[str], *, apply: bool = False, check: bool = False,
+                reconcile: bool = False, master: Path | None = None,
+                clients: list[str] | None = None) -> int:
+    """Plan/apply/check selected canonical packages for selected harness clients.
+
+    Args:
+        config: Canonical harness registry.
+        names: Canonical skill directory names to project.
+        apply: Apply additive copies and refresh the shared skill index.
+        check: Check selected projections and shared-index membership without writes.
+        reconcile: Preserve/import legacy resources before export.
+        master: Canonical skill-store path; defaults to the user's .skills directory.
+        clients: Optional client subset; omitted preserves all-target behavior.
+
+    Returns:
+        Nonzero when selected router or projection checks find drift.
+
+    Raises:
+        ValueError: If modes, skill names, or client names are invalid.
+
+    Require: Valid selected names; apply and check are mutually exclusive.
+    Guarantee: Exact bytes, additive selected copies, and preserved unrelated resources.
+    Maintain: Router clients share one canonical index; selection does not isolate its contents.
+    Assert: Check/default plan never writes or reindexes.
+    """
+    if apply and check:
+        raise ValueError('apply and check are mutually exclusive')
+    master = master or Path.home() / '.skills'
+    names = sorted(set(names))
+    if not names or any(not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', n) for n in names):
+        raise ValueError('select valid canonical skill directory names')
+    all_clients = set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS)
+    if clients is not None and (not clients or set(clients) - all_clients):
+        raise ValueError('select one or more supported skill clients')
+    selected_clients = all_clients if clients is None else set(clients)
+    copy_targets = tuple(target for target in SKILL_COPY_TARGETS if target in selected_clients)
+    router_targets = tuple(target for target in SKILL_ROUTER_TARGETS if target in selected_clients)
+    if reconcile:
+        report = reconcile_skill_master(master, apply=apply)
+        print(f"Reconciliation: {len(report['imported'])} unique resources; {len(report['preserved'])} divergent resources preserved; {len(report['skipped'])} unsafe packages skipped")
+    packages = []
+    for name in names:
+        package = master / name
+        if not package.resolve().is_relative_to(master.resolve()):
+            raise ValueError(f'canonical package escapes master: {name}')
+        findings = validate_skill(package / 'SKILL.md')
+        if findings:
+            raise ValueError('\n'.join(findings))
+        packages.append((name, package, skill_package_files(package)))
+    issues = _skill_router_issues(config, master, names, indexed=check, targets=router_targets)
+    copies = []
+    for target in copy_targets:
+        relative = SKILL_COPY_TARGETS[target]
+        for name, package, files in packages:
+            for source in files:
+                destination = Path.home() / relative / name / source.relative_to(package)
+                if not destination.exists() or destination.read_bytes() != source.read_bytes():
+                    copies.append((target, source, destination))
+    for target, source, destination in copies:
+        print(f'{"DRIFT" if check else "WRITE" if apply else "PLAN"} {target}: {source.relative_to(master)}')
+        if apply:
+            harness_write.write_bytes(destination, source.read_bytes(), BACKUP_RUN)
+    if apply:
+        url = config['mcp_servers']['retrieve-skills']['url'].removesuffix('/mcp').rstrip('/')
+        with urlopen(url + '/health', timeout=30) as response:
+            health = json.load(response)
+        if Path(health['store']).resolve() != master.resolve():
+            raise ValueError('router is not configured to use the canonical skill master')
+        with urlopen(Request(url + '/reindex', method='POST', data=b''), timeout=120) as response:
+            json.load(response)
+        issues.extend(_skill_router_issues(config, master, names, indexed=True, targets=router_targets))
+    for issue in sorted(set(issues)):
+        print('DRIFT ' + issue)
+    selected_label = ','.join(sorted(selected_clients))
+    print(f'Skills: {len(names)} selected; clients: {selected_label}; {len(copies)} changed resources; {len(set(issues))} router issues; shared index visibility is global')
+    return int(bool(issues) or (check and bool(copies)))
 
 
 def sync_agents(config: dict, apply: bool = False) -> int:
@@ -573,14 +807,21 @@ TARGETS = {
     "copilot": sync_github_copilot,
     "vscode": sync_vscode,
 }
-OPT_IN_TARGETS = ("agents",)
+OPT_IN_TARGETS = ("agents", "skills")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Sync harness config to all targets")
     parser.add_argument("--target", choices=[*TARGETS, *OPT_IN_TARGETS, "all"], default="all")
-    parser.add_argument("--apply", action="store_true", help="agents target only: write, instead of showing diffs")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="agents/skills: apply planned changes")
+    mode.add_argument('--check', action='store_true', help='skills: report drift without writing')
+    parser.add_argument('--skill', nargs='+', help='selected canonical skill packages')
+    parser.add_argument('--reconcile', action='store_true', help='skills: preserve/import legacy packages before export')
+    parser.add_argument('--client', nargs='+', choices=sorted(set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS)), help='skills: limit projections and router checks to selected clients')
     args = parser.parse_args()
+    if args.target != 'skills' and (args.skill or args.check or args.reconcile or args.client):
+        parser.error('--skill, --check, --reconcile and --client belong to --target skills')
 
     config = load_harness()
     print(f"Loaded harness.json: {len(config['mcp_servers'])} MCP servers")

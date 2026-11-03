@@ -1,4 +1,11 @@
-"""Provider-event ingestion and gated memory promotion.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Keep routing a proposal until evidence and acceptance exist | [mandatory] R2,R4,R16 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R2,R4,R16.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+Provider-event ingestion and gated memory promotion.
 
 Purpose: extend provider event capture to all adapters with append-only
 sequence/parent/tool-call linkage. Feed normalized observations into
@@ -321,8 +328,16 @@ class PromotionRouter:
             reason="default — no strong signal",
         )
 
-    def should_promote(self, candidate: PromotionCandidate, threshold: float = 0.5) -> bool:
-        """Check if a candidate meets promotion threshold."""
+    def should_promote(self, candidate: PromotionCandidate, threshold: float = 0.5,
+                       outcome_evidence: str = '', accepted: bool = False) -> bool:
+        """Require explicit acceptance and outcome evidence before durable promotion.
+
+        Guarantee: keyword confidence alone cannot authorize a write or shared scope.
+        Maintain: routing is a proposal; raw evidence is retained separately.
+        Assert: an ungrounded or unaccepted proposal stays unpromoted.
+        """
+        if not accepted or not outcome_evidence.strip() or not candidate.source_event_id:
+            return False
         if candidate.lane == PromotionLane.reject:
             return False
         if candidate.lane == PromotionLane.continuation_only:

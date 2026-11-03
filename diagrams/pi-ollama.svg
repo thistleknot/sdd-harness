@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1386 1142" width="1386" height="1142" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="28" y="52" font-size="30" font-weight="700" fill="#1a1a1a">Two model tiers: the party on a dial</text>
+<text x="28" y="80" font-size="15" fill="#555">x: role flow, left to right   y: model lane, heavy on top (hue); effort inside the lane, high on top (vibrancy)</text>
+<rect x="178" y="176" width="1180" height="110" rx="14" fill="none" stroke="#aaa" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="278.0" y="236.0" font-size="16" text-anchor="middle" fill="#888">no heavy model bound</text>
+<text x="833.0" y="236.0" font-size="14" text-anchor="middle" fill="#999">the ceiling is the lane below</text>
+<rect x="178" y="304" width="1180" height="388" rx="14" fill="#f9f6f1" stroke="#a87c24" stroke-width="2.5"/>
+<rect x="378" y="309" width="910" height="114" rx="9" fill="#f9ab10" fill-opacity="0.28" stroke="#f9ab10" stroke-width="1.5"/>
+<text x="1348" y="370.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">high</text>
+<rect x="378" y="433" width="910" height="146" rx="9" fill="#e2bd74" fill-opacity="0.28" stroke="#e2bd74" stroke-width="1.5"/>
+<text x="1348" y="510.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">medium</text>
+<rect x="378" y="589" width="910" height="98" rx="9" fill="#e1d6c1" fill-opacity="0.28" stroke="#e1d6c1" stroke-width="1.5"/>
+<text x="1348" y="642.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">low</text>
+<rect x="178" y="710" width="1180" height="308" rx="14" fill="#f9f1f1" stroke="#a82424" stroke-width="2.5"/>
+<rect x="378" y="715" width="910" height="90" rx="9" fill="#f91010" fill-opacity="0.28" stroke="#f91010" stroke-width="1.5"/>
+<text x="1348" y="764.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">high</text>
+<rect x="378" y="815" width="910" height="90" rx="9" fill="#e27474" fill-opacity="0.28" stroke="#e27474" stroke-width="1.5"/>
+<text x="1348" y="864.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">medium</text>
+<rect x="378" y="915" width="910" height="98" rx="9" fill="#e1c1c1" fill-opacity="0.28" stroke="#e1c1c1" stroke-width="1.5"/>
+<text x="1348" y="968.0" font-size="13" font-weight="600" text-anchor="end" fill="#555">low</text>
+<rect x="378" y="132" width="400" height="34" rx="10" fill="#f1f1f1" stroke="#bbb" stroke-width="1.5"/>
+<text x="398" y="155" font-size="17" font-weight="600" fill="#333">step 1</text>
+<text x="833.0" y="155" font-size="20" text-anchor="middle" fill="#888">→</text>
+<rect x="888" y="132" width="400" height="34" rx="10" fill="#f1f1f1" stroke="#bbb" stroke-width="1.5"/>
+<text x="908" y="155" font-size="17" font-weight="600" fill="#333">step 2</text>
+<path d="M159.2,506.0 C266.7,506.0 290.5,506.0 398.0,506.0" fill="none" stroke="#333" stroke-width="1.8" marker-end="url(#arrow)"/>
+<path d="M758.0,506.0 C825.5,506.0 840.5,638.0 908.0,638.0" fill="none" stroke="#333" stroke-width="1.8" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<path d="M758.0,537.5 C825.5,537.5 840.5,964.0 908.0,964.0" fill="none" stroke="#333" stroke-width="1.8" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<path d="M758.0,474.5 C825.5,474.5 840.5,366.0 908.0,366.0" fill="none" stroke="#333" stroke-width="1.8" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="178" y="304" width="200" height="388" rx="14" fill="#e2bd74" stroke="#a87c24" stroke-width="2.5"/>
+<text x="278.0" y="462.0" font-size="13" text-anchor="middle" fill="#222">mid model</text>
+<text x="278.0" y="488.0" font-size="11" font-weight="700" text-anchor="middle" fill="#111">qwopus-coding-thinking-256k:9b</text>
+<text x="278.0" y="512.0" font-size="11" font-weight="700" text-anchor="middle" fill="#111">qwen3.5-reasoning-thinking-256k:9b</text>
+<rect x="178" y="710" width="200" height="308" rx="14" fill="#e27474" stroke="#a82424" stroke-width="2.5"/>
+<text x="278.0" y="828.0" font-size="13" text-anchor="middle" fill="#222">light model</text>
+<text x="278.0" y="854.0" font-size="18" font-weight="700" text-anchor="middle" fill="#111">qwen3.5-oc:2b</text>
+<text x="278.0" y="878.0" font-size="18" font-weight="700" text-anchor="middle" fill="#111">qwen3.5-oc:4b</text>
+<rect x="28.0" y="479.0" width="131.2" height="54" rx="27" fill="#2b2b2b" stroke="#111" stroke-width="2"/>
+<text x="93.6" y="511.0" font-size="13" font-weight="600" text-anchor="middle" fill="#fff">User request</text>
+<rect x="398.0" y="443.0" width="360" height="126" rx="12" fill="#e2bd74" stroke="#825e17" stroke-width="2"/>
+<text x="578.0" y="469.0" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Leader (the session)</text>
+<text x="578.0" y="490.0" font-size="14" font-weight="600" text-anchor="middle" fill="#222">qwopus-coding-thinking-256k:9b / medium</text>
+<text x="578.0" y="509.0" font-size="12" text-anchor="middle" fill="#333">devises the plan, writes the contract</text>
+<text x="578.0" y="525.0" font-size="12" text-anchor="middle" fill="#333">(signatures + Google docstrings),</text>
+<text x="578.0" y="541.0" font-size="12" text-anchor="middle" fill="#333">fixes low-level spec bugs</text>
+<text x="578.0" y="557.0" font-size="12" text-anchor="middle" fill="#333">(one clarification, then up)</text>
+<rect x="908.0" y="925.0" width="360" height="78" rx="12" fill="#e1c1c1" stroke="#821717" stroke-width="2"/>
+<text x="1088.0" y="951.0" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Scout (reader)</text>
+<text x="1088.0" y="972.0" font-size="14" font-weight="600" text-anchor="middle" fill="#222">qwen3.5-oc:2b / low</text>
+<text x="1088.0" y="991.0" font-size="12" text-anchor="middle" fill="#333">read-only</text>
+<rect x="908.0" y="599.0" width="360" height="78" rx="12" fill="#e1d6c1" stroke="#825e17" stroke-width="2"/>
+<text x="1088.0" y="625.0" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Fighters (doers, coders)</text>
+<text x="1088.0" y="646.0" font-size="14" font-weight="600" text-anchor="middle" fill="#222">qwopus-coding-thinking-256k:9b / low</text>
+<text x="1088.0" y="665.0" font-size="12" text-anchor="middle" fill="#333">a team: fill the bodies, run the check</text>
+<rect x="908.0" y="319.0" width="360" height="94" rx="12" fill="#f9ab10" stroke="#825e17" stroke-width="2"/>
+<text x="1088.0" y="345.0" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Oracle (wild card)</text>
+<text x="1088.0" y="366.0" font-size="14" font-weight="600" text-anchor="middle" fill="#222">qwopus-coding-thinking-256k:9b / high</text>
+<text x="1088.0" y="385.0" font-size="12" text-anchor="middle" fill="#333">get-out-of-jail card:</text>
+<text x="1088.0" y="401.0" font-size="12" text-anchor="middle" fill="#333">replans from the evidence</text>
+<rect x="749.1" y="561.0" width="167.8" height="22" rx="11" fill="#ffffff" fill-opacity="0.94" stroke="#bbb" stroke-width="1"/>
+<text x="833.0" y="576.0" font-size="12" text-anchor="middle" fill="#222">file sets / bug reports</text>
+<rect x="772.2" y="739.8" width="121.6" height="22" rx="11" fill="#ffffff" fill-opacity="0.94" stroke="#bbb" stroke-width="1"/>
+<text x="833.0" y="754.8" font-size="12" text-anchor="middle" fill="#222">reading / digest</text>
+<rect x="726.0" y="409.2" width="214.0" height="22" rx="11" fill="#ffffff" fill-opacity="0.94" stroke="#bbb" stroke-width="1"/>
+<text x="833.0" y="424.2" font-size="12" text-anchor="middle" fill="#222">stuck + evidence / better spec</text>
+<text x="28" y="1064" font-size="13" font-weight="600" fill="#444">Color key</text>
+<rect x="128" y="1048" width="44" height="24" rx="5" fill="#f91010" stroke="#555" stroke-width="1"/>
+<rect x="176" y="1048" width="44" height="24" rx="5" fill="#e27474" stroke="#555" stroke-width="1"/>
+<rect x="224" y="1048" width="44" height="24" rx="5" fill="#e1c1c1" stroke="#555" stroke-width="1"/>
+<text x="274" y="1065" font-size="13" fill="#444">light</text>
+<rect x="342" y="1048" width="44" height="24" rx="5" fill="#f9ab10" stroke="#555" stroke-width="1"/>
+<rect x="390" y="1048" width="44" height="24" rx="5" fill="#e2bd74" stroke="#555" stroke-width="1"/>
+<rect x="438" y="1048" width="44" height="24" rx="5" fill="#e1d6c1" stroke="#555" stroke-width="1"/>
+<text x="488" y="1065" font-size="13" fill="#444">mid</text>
+<rect x="556" y="1048" width="44" height="24" rx="5" fill="#10f924" stroke="#555" stroke-width="1"/>
+<rect x="604" y="1048" width="44" height="24" rx="5" fill="#74e27d" stroke="#555" stroke-width="1"/>
+<rect x="652" y="1048" width="44" height="24" rx="5" fill="#c1e1c4" stroke="#555" stroke-width="1"/>
+<text x="702" y="1065" font-size="13" fill="#444">heavy</text>
+<text x="780" y="1065" font-size="13" fill="#666">hue = model, vibrancy = effort (high, medium, low)</text>
+</svg>

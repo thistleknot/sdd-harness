@@ -1,4 +1,11 @@
-"""UserPromptSubmit hook: inject invisible codebase map on first prompt.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Ignore empty session identity before marker construction | [mandatory] R17 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R17.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+UserPromptSubmit hook: inject invisible codebase map on first prompt.
 
 Purpose: give the agent an automatic understanding of project structure
 without the user needing to explain it. Fires once per session (caches
@@ -116,6 +123,8 @@ def main():
 
     # Check if already injected this session
     session_id = payload.get("session_id", "")
+    if not isinstance(session_id, str) or not session_id.strip():
+        return 0
     marker = SESSION_MARKER.with_suffix(f".{session_id[:8]}")
 
     if marker.exists():

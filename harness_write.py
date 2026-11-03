@@ -1,4 +1,11 @@
-"""| Stage | Mechanism | Tag | Requirements |
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Atomically write exact bytes with non-overwriting backups | [mandatory] R10-R12 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R10-R12.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+| Stage | Mechanism | Tag | Requirements |
 |---|---|---|---|
 | GUARD | Reject every denylisted artifact before filesystem access | [mandatory] | R1 |
 | READ | Read permitted existing files without changing bytes | [mandatory] | R1 |
@@ -16,6 +23,7 @@ Failure modes: unsafe paths, malformed formats, or failed backups raise before r
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -330,30 +338,52 @@ def plan(artifacts: list) -> list:
 
 
 def apply(changes: list, backup_root: Path) -> list:
-    """Back up each file that will change, then write atomically. Returns the paths written."""
+    """Back up changed text and atomically replace through the shared byte writer.
+
+    Require: caller supplies a run-scoped backup root and preflighted changes.
+    Guarantee: unchanged artifacts cause no write or backup.
+    Maintain: binary package copies and text configuration use the same write boundary.
+    Assert: destination guards are repeated at the final write.
+    """
     written = []
     for ch in changes:
         if ch.status == "IDENTICAL":
             continue
         path = ch.artifact.path
-        why = denied(path)
-        if why:
-            raise WriteError(f"refusing to touch {path}: {why}")
-        if ch.before is not None:
-            flat = re.sub(r"[:\\/]+", "__", str(path))
-            dest = backup_root / flat
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with dest.open("w", encoding="utf-8", newline="") as fh:
-                fh.write(ch.before)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
-                fh.write(ch.after)
-            os.replace(tmp, path)
-        except BaseException:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
-            raise
+        write_bytes(path, ch.after.encode('utf-8'), backup_root)
         written.append(path)
     return written
+
+
+def write_bytes(path: Path, content: bytes, backup_root: Path) -> bool:
+    """Write an owned package/config artifact with exact-byte backup and atomic replacement.
+
+    Require: run-scoped backup root; caller has declared ownership of this path.
+    Guarantee: old bytes survive before replacement; identical bytes are a no-op.
+    Maintain: shared deny rules apply to text and binary resources.
+    Assert: a reused backup name never overwrites earlier differing evidence.
+    """
+    why = denied(path)
+    if why:
+        raise WriteError(f'refusing to touch {path}: {why}')
+    before = path.read_bytes() if path.exists() else None
+    if before == content:
+        return False
+    if before is not None:
+        flat = re.sub(r'[:\\/]+', '__', str(path))
+        dest = backup_root / flat
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists() and dest.read_bytes() != before:
+            dest = dest.with_name(dest.name + '.' + hashlib.sha256(before).hexdigest()[:16])
+        dest.write_bytes(before)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f'.{path.name}.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return True

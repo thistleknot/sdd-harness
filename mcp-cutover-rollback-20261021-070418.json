@@ -1,0 +1,15 @@
+﻿{
+    "CreatedAt":  "2026-10-21T07:04:18.3509342-07:00",
+    "Services":  {
+                     "skill-router":  "c:\\users\\user\\py310\\Scripts\\python.exe",
+                     "mem-server":  "c:\\users\\user\\py310\\Scripts\\python.exe",
+                     "todo-mcp":  "c:\\users\\user\\py310\\Scripts\\python.exe",
+                     "specs-mcp":  "C:\\Users\\user\\py310\\Scripts\\python.exe"
+                 },
+    "Task":  {
+                 "Name":  "skill-router-probe",
+                 "Execute":  "c:\\users\\user\\py310\\Scripts\\pythonw.exe",
+                 "Arguments":  "\"C:\\Users\\user\\.skills\\retrieve-skills\\health_probe.py\"",
+                 "WorkingDirectory":  null
+             }
+}

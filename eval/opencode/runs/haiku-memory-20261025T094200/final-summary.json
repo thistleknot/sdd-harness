@@ -1,0 +1,35 @@
+{
+  "verdict": "NOT TESTED",
+  "suite_directory": "C:/Users/user/.harness/eval/opencode/runs/haiku-memory-20261025T094200",
+  "deadline_epoch": 1792947415,
+  "remaining_s_at_start": 180,
+  "case_statuses": {
+    "project_recall": "NOT TESTED (not run: deadline)",
+    "session_isolation": "NOT TESTED (not run: deadline)",
+    "missing_memory": "NOT TESTED (not run: deadline)"
+  },
+  "gates": {
+    "1_deadline_and_state": "passed (earlier run)",
+    "2_memory_health_and_model": "passed (earlier run, not rechecked): 8055/health HTTP 200; qwen3.5-oc:2b in LiteLLM /v1/models",
+    "3_fixtures": "partial: fixture directory and empty conversations.sqlite3 created via conversation_store.connect; no synthetic records written",
+    "4_workspaces_and_seeding": "not reached",
+    "5_private_server_18055": "not reached",
+    "6_direct_mcp_checks": "not reached",
+    "7_routing_overlay": "not reached",
+    "8_streaming_readiness_call": "not reached",
+    "9_capture_cases": "not reached",
+    "10_cleanup": "no owned processes started; nothing to stop"
+  },
+  "first_blocker": "Deadline: 139 s remained when gate 3 finished, too little for gate 4 seeding, the private server, and any capture (each capture is up to 120 s). Gate 3 seeding is also incomplete.",
+  "cleanup": "No owned processes launched. Fixture temp directory C:/Users/user/AppData/Local/Temp/haiku-memfix-94zpd97y left in place (private synthetic data, outside the Harness suite).",
+  "files_changed": [
+    "C:/Users/user/.harness/eval/opencode/runs/haiku-memory-20261025T094200/make_fixtures.py",
+    "C:/Users/user/.harness/eval/opencode/runs/haiku-memory-20261025T094200/final-summary.json",
+    "C:/Users/user/.harness/eval/opencode/runs/haiku-memory-20261025T094200/setup-attempt-1-final-summary.json"
+  ],
+  "uncertainties": [
+    "The PostToolUse hook asked for unit tests for make_fixtures.py; I skipped them because the deadline had about 2 minutes left. make_fixtures.py is untested.",
+    "The fixture DB holds no records, so no fixture contents or digests exist yet.",
+    "The memory-index __pycache__ may have been created by the fixture import (not verified)."
+  ]
+}

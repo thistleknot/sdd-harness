@@ -1,5 +1,11 @@
 # Test Plan — Cross-Harness SDD Conformance
 
+## Current validation delta — 2026-10-21
+
+- Skill package gate: `python -m pytest tests/test_validate_skills.py -q` -> 5 passed; `python scripts/validate_skills.py --root C:\Users\user\.skills` -> 198 scanned, 0 findings. Checks metadata, directory/name agreement, and prose-relative Markdown references without modifying the store or calling a model.
+- Agent projection and manifest matrix contracts: `python -m pytest specs/test_manifest_agents.py specs/test_render_party.py -q` -> 43 passed after replacing stale test expectations with current `tiers.toml` assignments and adding matrix integrity assertions.
+- Limits: these checks establish static package shape and rendered output behavior; they do not measure whether each skill triggers correctly or whether a model follows its instructions.
+
 ## Objective
 
 Prove each harness (Claude Code, opencode, pi) implements the SDD contract:

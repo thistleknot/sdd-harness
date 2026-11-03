@@ -1,4 +1,11 @@
-"""Session Handoff: package context into prompt.md for cross-session continuity.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Append project-tagged archives without overwriting authored prompts | [mandatory] R1,R2,R9 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R1,R2,R9.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+Session Handoff: package context into prompt.md for cross-session continuity.
 
 Purpose: when context is getting heavy or a logical breakpoint is reached,
 generate a prompt.md that captures the current state so the next session
@@ -25,6 +32,7 @@ Failure modes: any error → exit 0 (fail-open, never block session end).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -36,6 +44,9 @@ from pathlib import Path
 import sys as _ks
 _ks.path.insert(0, str(Path(__file__).parent))
 from _common import disabled
+
+sys.path.insert(0, str(Path.home() / '.skills' / 'memory-index'))
+from conversation_store import project_identity
 
 MEMORY_DIR = Path(os.path.expanduser("~/memory-bank"))
 HANDOFF_DIR = MEMORY_DIR / "handoffs"
@@ -297,33 +308,23 @@ def build_prompt_md(
 
 
 def resolve_output_path(workspace: str | None, mode: str) -> Path:
-    """Determine where to write prompt.md based on mode and workspace."""
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    """Choose a canonical-project archive without overwriting human prompt.md.
 
-    if mode == "close":
-        # Archive: goes to handoffs dir with timestamp
-        HANDOFF_DIR.mkdir(parents=True, exist_ok=True)
-        repo = get_git_root(workspace)
-        prefix = f"{repo}-" if repo else ""
-        return HANDOFF_DIR / f"{prefix}closed-{timestamp}.md"
-
-    # For migrate and handoff: archive to the handoffs dir with a timestamp.
-    #
-    # Deliberately NEVER writes <workspace>/prompt.md. That path is reserved for
-    # hand-authored handoffs and must not be machine-clobbered: this runs as a
-    # Stop hook, so it fires on every session stop and would silently overwrite
-    # a human-written prompt.md within minutes (an age guard only ever delayed
-    # that, it did not prevent it).
-    #
-    # Nothing is lost by redirecting here: session_resume.py already discovers
-    # these via its handoffs/prompt-*.md fallback, so cross-session continuity
-    # is unchanged. Keep this filename shape in sync with that glob.
-    HANDOFF_DIR.mkdir(parents=True, exist_ok=True)
-    return HANDOFF_DIR / f"prompt-{timestamp}.md"
+    Require: explicit existing workspace; mode has been validated by the caller.
+    Guarantee: projects with equal basenames use different archives.
+    Maintain: common Git worktrees share project continuity.
+    Assert: closed archives cannot become automatic resume candidates.
+    """
+    identity = project_identity(workspace or '')
+    key = hashlib.sha256(identity.encode()).hexdigest()[:24]
+    directory = HANDOFF_DIR / 'projects' / key
+    directory.mkdir(parents=True, exist_ok=True)
+    prefix = 'closed' if mode == 'close' else 'prompt'
+    return directory / f'{prefix}-{time.time_ns()}.md'
 
 
 def main():
-    if disabled():
+    if disabled() or os.environ.get('RSI_EVALUATION'):
         return 0
     # Try to read from stdin first (hook mode)
     payload = {}
@@ -356,6 +357,8 @@ def main():
     # Merge: CLI > payload
     mode = args.mode or payload.get("mode", "handoff")
     workspace = args.workspace or payload.get("workspace") or payload.get("cwd")
+    if not workspace:
+        return 0
     objective = args.objective or payload.get("objective", "")
     if not objective:
         # Hook mode: the Stop payload never carries `objective`, so derive it from
@@ -404,7 +407,12 @@ def main():
     )
 
     # Write it
-    output_path = resolve_output_path(workspace, mode)
+    try:
+        output_path = resolve_output_path(workspace, mode)
+        identity = project_identity(workspace)
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return 0  # Hook failure is noncritical; never choose an unrelated global workspace.
+    content = f'Project-URI: {identity}\nSession-ID: {payload.get("session_id", "")}\n\n' + content
     output_path.write_text(content, encoding="utf-8")
 
     # Output for hook consumers

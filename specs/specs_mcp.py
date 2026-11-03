@@ -1,4 +1,11 @@
-"""specs_mcp.py — FastMCP server exposing the specs tracker as MCP tools.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Register the complete tool catalog before stateless startup | [mandatory] R17 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R17.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+specs_mcp.py — FastMCP server exposing the specs tracker as MCP tools.
 
 Runs as a persistent HTTP service. CRUD tools write to specs.db,
 then auto-render all markdown views after each mutation.
@@ -285,14 +292,6 @@ async def health(_: Request) -> JSONResponse:
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Specs MCP server")
-    parser.add_argument("--port", type=int, default=8057, help="HTTP port (default: 8057)")
-    args = parser.parse_args()
-
-    mcp.run(transport="streamable-http", host="127.0.0.1", port=args.port)
 
 
 # ── Tech Debt ───────────────────────────────────────────────────────────────
@@ -502,3 +501,12 @@ def graph_stats() -> str:
     s = graph.stats()
     graph.close()
     return f"Nodes: {s['total_nodes']}, Edges: {s['total_edges']}, By type: {s['nodes_by_type']}"
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Specs MCP server")
+    parser.add_argument("--port", type=int, default=8057, help="HTTP port (default: 8057)")
+    args = parser.parse_args()
+
+    mcp.run(transport="streamable-http", host="127.0.0.1", port=args.port, stateless_http=True)

@@ -1,0 +1,80 @@
+{
+  "arm": "B",
+  "prompt_number": 3,
+  "prompt": "Use the memory-index search_memory tool exactly once. Query: opencode_probe_nonce_20261025_080900_x7. workspace_root: C:\\Users\\user\\.harness. session_id: open-code-weakest-probe. scope: project_shared. k: 1. Do not call other tools. Reply with only called after the tool returns.",
+  "prompt_source": "diagnostic",
+  "model": "litellm/qwen3.5-oc:2b",
+  "agent": "orchestrator",
+  "thinking": false,
+  "pure": true,
+  "command": [
+    "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe",
+    "run",
+    "--format",
+    "json",
+    "--title",
+    "OpenCode probe",
+    "--print-logs",
+    "--log-level",
+    "INFO",
+    "--model",
+    "litellm/qwen3.5-oc:2b",
+    "--agent",
+    "orchestrator",
+    "--pure",
+    "Use the memory-index search_memory tool exactly once. Query: opencode_probe_nonce_20261025_080900_x7. workspace_root: C:\\Users\\user\\.harness. session_id: open-code-weakest-probe. scope: project_shared. k: 1. Do not call other tools. Reply with only called after the tool returns."
+  ],
+  "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe",
+  "overlay": {
+    "agent": {
+      "orchestrator": {
+        "permission": {
+          "edit": "deny",
+          "subtask": "deny",
+          "list": "deny",
+          "grep": "deny",
+          "bash": "deny",
+          "glob": "deny",
+          "read": "deny"
+        }
+      }
+    },
+    "mcp": {
+      "data-science-skills": {
+        "enabled": false
+      },
+      "agentic-kanban": {
+        "enabled": false
+      },
+      "memory-index": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8055/mcp",
+        "enabled": true
+      },
+      "retrieve-skills": {
+        "enabled": false
+      },
+      "todo": {
+        "enabled": false
+      },
+      "specs": {
+        "enabled": false
+      },
+      "graphify": {
+        "enabled": false
+      }
+    }
+  },
+  "started": 1792941026.0138621,
+  "timeout_seconds": 90.0,
+  "status": "finished",
+  "pid": 1435724,
+  "cleanup": {
+    "exit": 0,
+    "stdout": "SUCCESS: The process with PID 1435724 (child process of PID 1437172) has been terminated.\n",
+    "stderr": ""
+  },
+  "exit": 1,
+  "timeout": true,
+  "elapsed": 94.33
+}

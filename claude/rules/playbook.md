@@ -34,6 +34,11 @@ Detected by `~/.claude/hooks/playbook.py --plan` on UserPromptSubmit.
 
 ## The name says what it is
 
+**Where it lives: `./.tmp/plans/` in the project, never `~/.claude/plans/`.** The
+`plansDirectory` setting points plan mode there, so a plan sits beside the repo it
+describes and is disposable scratch. A decision worth keeping is promoted to the
+project's spec dir (`.specs/`); the `playbook.md` ledger stays at the repo root.
+
 A plan file is named for its intent. Claude Code mints `plans/<random-slug>.md`
 when plan mode opens -- before anything is known about the work -- so
 `cosmic-mapping-whisper.md` tells the operator nothing and the directory is only
@@ -118,25 +123,26 @@ split into "these three are independent, then this chain" is two layers.
 Layer count is not a virtue. Two layers of six beats six layers of two: every barrier is
 idle time spent waiting on the slowest member.
 
-## The model ladder
+## The party
 
 A hook cannot switch the session model — no such field exists in the hook output
-contract. So the tiering lives one level down, on each subagent dispatch, where the
-`model` parameter *is* controllable. This is the better place regardless: the main
-session stays on whatever the operator set, and every task still gets the full ladder.
+contract. So the tiering lives one level down, on each subagent dispatch, by **agent
+type**: each role's model and effort come from `~/.harness/tiers.toml`, rendered into the
+agent files by `render_agents.py`. This file names roles, never models, so a change of
+provider or model never touches it. The main session stays on whatever the operator set.
 
-| Stage | Model | Writes | Why |
+| Stage | Role | Writes | Why |
 |---|---|---|---|
-| Ledger authorship | **fable** | `playbook.md` only | Widest view, sees the campaign whole — including where the layer boundaries fall. Never code. |
-| Per-task subplan | **opus** | `.playbook/T<n>.subplan.md` only | Turns large external scope into small internal scope. |
-| Implementation | **sonnet** | source + `_Lessons:` | Executes a subplan that is already decided. Cheap, and it does not need to re-derive judgment. |
-| Unstick | **opus** | subplan only | Re-enters on `[BLOCKED]` and *only* then. |
+| Ledger authorship | the **oracle** agent | `playbook.md` only | Widest view, sees the campaign whole — including where the layer boundaries fall. Never code. |
+| Per-task subplan | the **Leader** (this session) | `.playbook/T<n>.subplan.md` only | Turns large external scope into a small contract: signatures + docstrings. |
+| Implementation | a **doer** agent (a Fighter) | source + `_Lessons:` | Executes a subplan that is already decided; it does not need to re-derive judgment. |
+| Unstick | the Leader, then the **oracle** | subplan, then the ledger | Re-enters on `[BLOCKED]` and *only* then. |
 
-Cheapest model that suffices, per stage (CLAUDE.md 9). The point of the split is that
-sonnet never makes an architectural call and opus never burns context on a `pytest` loop.
+The point of the split is that a Fighter never makes an architectural call and the Oracle
+never burns context on a `pytest` loop (CLAUDE.md 9).
 
-If the operator wants this *session* on fable too, that is a `/model` keystroke only
-they can make. Say it once; do not ask twice.
+If the operator wants this *session* on a different model, that is a `/model` keystroke
+only they can make. Say it once; do not ask twice.
 
 ## The loop
 
@@ -144,13 +150,13 @@ they can make. Say it once; do not ask twice.
    and reads its declared type.
 2. Flip what it is about to dispatch to `[WIP]`: **all** the `[OPEN]` tasks if the layer
    is parallel, **one** if it is sequential.
-3. **Subplan (opus).** One subagent per task, `model: opus`, read + write-subplan tools
-   only. Its brief: the task line, its `_Files:`, its `_Verify:`, and the playbook path.
-   It writes `.playbook/T<n>.subplan.md` — what to change in each file, in what order,
-   and what "done" looks like. It touches no source.
-4. **Implement (sonnet).** A *fresh* subagent, `model: sonnet`. Its brief is the subplan
-   path and nothing else — not the playbook, not the sibling tasks, not this session's
-   context. That absence IS the feature.
+3. **Subplan (the Leader).** For each task the Leader writes `.playbook/T<n>.subplan.md`
+   from the task line, its `_Files:` and its `_Verify:`: what to change in each file, in
+   what order, as signatures and docstrings, and what "done" looks like. It touches no
+   source bodies, and it is small by construction (a contract).
+4. **Implement (a doer).** A *fresh* `doer` subagent. Its brief is the subplan path and
+   nothing else — not the playbook, not the sibling tasks, not this session's context.
+   That absence IS the feature.
 5. It implements, runs `_Verify:`, and appends its own `_Lessons:` line under the task in
    the playbook. No run = not done (Law 7). It returns a **verdict**, not a transcript:
    pass/fail + the one discriminating line.
@@ -168,44 +174,45 @@ entire handoff, and if it is not enough, the task was scoped too big. **Never** 
 task from the next layer because the current one is still waiting — that is the barrier,
 and skipping it is how a sequential dependency gets discovered at merge time.
 
-## Failure — stuck goes up one tier, one shot each
+## Failure — stuck goes up the party, one shot each
 
-Sonnet stuck asks opus. Opus stuck asks fable. Fable re-scopes. Nobody gets two tries at
-the same wall, and nobody skips a tier.
+A Fighter stuck asks the Leader. The Leader stuck asks the Oracle. The Oracle replans.
+Nobody gets two tries at the same wall (the Leader's one clarification is
+`leader_attempts` in tiers.toml), and nobody skips a step.
 
-| Tier | Gets one shot at | On failure | Writes |
+| Role | Gets one shot at | On failure | Writes |
 |---|---|---|---|
-| **sonnet** | implementing the subplan | `[BLOCKED]` + evidence → opus | source, `_Blocked:` |
-| **opus** | revising the subplan around the blocker | `[BLOCKED]` + evidence → fable | subplan, `_Blocked:` |
-| **fable** | re-scoping the task — including moving it to another layer | STOP, hand to the operator | `playbook.md` |
+| **doer** | implementing the subplan | `[BLOCKED]` + evidence → the Leader | source, `_Blocked:` |
+| **Leader** | one clarification of the subplan around the blocker | `[BLOCKED]` + evidence → the oracle | subplan, `_Blocked:` |
+| **oracle** | replanning the task — including moving it to another layer | the Leader decides and logs the basis | `playbook.md` |
 
-**Escalation carries evidence, not a verdict.** A tier that gets stuck appends a
+**Escalation carries evidence, not a verdict.** A role that gets stuck appends a
 `_Blocked:` line under the task before it hands up — what it tried, the exact failing
 output, and what it thinks the real obstacle is:
 
 ```markdown
 - [BLOCKED] T3 Retry the handshake with backoff
   _Files:_ src/net.py
-  _Blocked: sonnet_ — subplan step 3 says patch `_connect`, but `_connect` is
+  _Blocked: doer_ — subplan step 3 says patch `_connect`, but `_connect` is
     generated by the codegen in build.py; the edit is overwritten on every build.
     `pytest tests/test_net.py -q` → 2 failed, AssertionError: retries=0
-  _Blocked: opus_ — cannot revise around this at subplan scope. The task assumes
+  _Blocked: leader_ — cannot clarify around this at subplan scope. The task assumes
     net.py is hand-written. That assumption belongs to the ledger, not the subplan.
 ```
 
-This is the whole reason the playbook is a log and not just a task list. Fable cannot
-re-scope a task it only knows failed — it has to read what each tier hit and why they
-could not get past it. **A `[BLOCKED]` with no `_Blocked:` evidence line is not an
-escalation, it is a give-up; send it back to the tier that wrote it.**
+This is the whole reason the playbook is a log and not just a task list. The Oracle
+cannot replan a task it only knows failed — it has to read what each role hit and why
+they could not get past it. **A `[BLOCKED]` with no `_Blocked:` evidence line is not an
+escalation, it is a give-up; send it back to the role that wrote it.**
 
-A common fable verdict is that the layering was wrong: a task placed in a parallel layer
+A common Oracle verdict is that the layering was wrong: a task placed in a parallel layer
 turned out to read a sibling's output. The fix is to move that task into a sequential
 layer, not to serialise the whole campaign.
 
-After fable re-scopes, the task re-enters at the bottom of its layer: fresh subplan,
-fresh sonnet. If it blocks a second time at fable's tier, stop and hand it to the
-operator — that is `rules/orchestration.md`'s bounded re-plan law (2 rounds, never a
-third) applied at task scope.
+After the Oracle replans, the task re-enters at the bottom of its layer: fresh subplan,
+fresh doer. If it blocks a second time after the Oracle's replan, the Leader decides and
+logs the basis — the Oracle augments a plan at most twice per task
+(`rules/orchestration.md`), and the operator is asked only for the standing stops.
 
 ## When NOT to use this
 

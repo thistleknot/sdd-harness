@@ -63,17 +63,17 @@
         {
           "type": "command",
           "command": "python C:/Users/user/.harness/hooks/codebase_map.py",
-          "timeout": 5
+          "timeout": 20
         },
         {
           "type": "command",
           "command": "python C:/Users/user/.claude/hooks/playbook.py",
-          "timeout": 10
+          "timeout": 20
         },
         {
           "type": "command",
           "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
-          "timeout": 10
+          "timeout": 20
         }
       ]
     },

@@ -2,34 +2,45 @@
 #
 # Companion to manifest.toml. That file answers "which artifacts can this
 # harness hold?" (artifact x harness). This one answers "which brain runs this
-# role here?" (role x harness). Different matrix, same discipline: every cell
+# role, through which provider, in which harness?". Same discipline: every cell
 # is an explicit recorded decision.
 #
-# THREE LAYERS, and the whole point is that only the last one is harness-specific:
+# FOUR LAYERS, and only the last two know a vendor string:
 #
-#   1. GATES     orchestration.md annotates each gate [high]/[med]/[low].
-#                That is a *demand* -- "this gate needs high-grade reasoning" --
-#                not a model. It is already written and does not change here.
-#   2. TIERS     L1/L2/L3 below. Capability classes, no vendor names.
-#   3. BINDINGS  tier -> concrete model id, one block per harness. The ONLY
-#                place a vendor string is allowed to appear.
+#   1. ROLES      The party: leader (the session), doer (Fighters), reader (Scout),
+#                 oracle. Each pins a TIER and an EFFORT floor. No model names.
+#   2. TIERS      L0-L3 below. Capability classes, no vendor names.
+#   3. PROVIDERS  [binding.<provider>]: anthropic, openai, openrouter, ollama, google.
+#                 Models are their own wrapper layer, restricted BY PROVIDER: tier ->
+#                 concrete model id, the effort map, and the DIAL (ordered
+#                 (tier, effort) steps, weakest first). The only place a model id appears.
+#   4. HARNESSES  [harness.<id>]: which providers a harness can speak, how it spells a
+#                 model id, where its agent files and session defaults live.
 #
-# REASONING IS A SEPARATE AXIS. L1-at-high-effort is not L2. A cheap model
-# thinking hard and an expensive model thinking lightly are different animals,
-# and collapsing them into one ladder is how you end up paying opus prices for
-# sonnet work. Every harness exposes the knob differently (Claude: thinking
-# budget; Codex: reasoning_effort; Gemini: thinkingBudget), so tiers carry the
-# effort symbolically and each adapter owns the translation.
+# A harness renders EVERY provider template it can speak, as separate templates:
+# `render_agents.py --harness opencode --provider all`. party.py resolves roles
+# against a provider's dial and squashes roles whose (model, effort) coincide.
 #
-# MODEL NAMES EXPIRE. Every binding carries `resolved`. The adapter warns when
+# REASONING IS A SEPARATE AXIS. A cheap model thinking hard and an expensive
+# model thinking lightly are different animals, so effort travels symbolically
+# (low|medium|high) and each harness owns its translation (claude: effort,
+# codex: model_reasoning_effort, pi: thinking, opencode: a model variant).
+#
+# MODEL NAMES EXPIRE. Every binding carries `resolved`. The renderer warns when
 # a binding is older than `stale_after_days` rather than silently pinning a
-# dead alias -- same rule as sync-to-claude.ps1's reduction guard: never let
-# stale state overwrite reality without saying so.
+# dead alias.
 
 schema = 1
 stale_after_days = 90
 
 # ---------------------------------------------------------------- tiers
+
+[tier.L0]
+label       = "reader"
+demand      = "low"
+purpose     = "Off-ladder reading and summarizing: digests with file:line pointers. Read-only."
+escalates_to = ""          # not on the escalation ladder; a digest is never a verdict
+note        = "Cheapest tier. Its output is a pointer map; gates re-read raw lines before any verdict."
 
 [tier.L1]
 label       = "worker"
@@ -43,95 +54,223 @@ label       = "drafter"
 demand      = "med"
 purpose     = "Drafting from an existing plan; cross-model repair when L1 is exhausted."
 escalates_to = "L3"
-note        = "Reached by escalation, not by default. A second opinion, not a smarter L1."
+note        = "Reached by escalation, not by default. No role binds here since the ladder was retired (2026-10-08); kept for providers with a distinct second brain."
 
 [tier.L3]
 label       = "planner"
 demand      = "high"
 purpose     = "Planning, architecture, cross-file judgment. Produces specs, never code."
-escalates_to = ""          # terminal: ladder exhausted, pipeline stops
+escalates_to = ""          # terminal
 note        = "Bounded to two re-plan rounds total (orchestration.md)."
 
 # ---------------------------------------------------------------- roles
 #
-# Canonical agents. `tier` picks the brain, `reasoning` picks how hard it
-# thinks. Note fixer_low and fixer_med are the SAME tier at different effort --
-# that distinction is exactly the second axis, and it is why effort cannot be
-# folded into the tier.
-#
-# `name` is what the rendered file is called on disk. The current names encode
-# a vendor ("opus_planner"), which is a lie the moment L3 binds to anything
-# else -- see rename_to.
+# The party, named for the job, never the vendor. `tier` picks the brain,
+# `reasoning` is the effort FLOOR the role starts at, and `ceiling` is how far the
+# Leader may slide the dial at dispatch (the accordion: start contracted, widen on a
+# trigger, contract after). `kind = "session"` marks a role that is not an agent file:
+# the Leader is the session itself, but still has per-harness settings.
 
-[role.planner]
-tier      = "L3"
-reasoning = "high"
-gate      = "plan"
-tools     = ["Read", "Grep", "Glob", "Write"]
-name      = "opus_planner"
-rename_to = "planner"
-
-[role.critic]
+[role.leader]
 tier      = "L1"
 reasoning = "medium"
-gate      = "1"
-tools     = ["Read", "Bash", "Grep", "Glob"]
-name      = "sonnet_critic"
-rename_to = "critic"
+ceiling   = "high"
+kind      = "session"
+gate      = "none"          # Leader: plans, writes the contract, resolves low-level spec bugs, calls the Oracle only when stuck
+tools     = []
+name      = "leader"
 
-[role.fixer_low]
-tier      = "L2"
+[role.reader]
+tier      = "L0"
 reasoning = "low"
-gate      = "2"
-tools     = ["Read", "Grep", "Glob", "Bash"]
-name      = "opus_fixer_low"
-rename_to = "fixer_low"
+ceiling   = "low"
+gate      = "none"          # Scout: off-ladder, read-only digests with file:line pointers
+tools     = ["Read", "Grep", "Glob"]
+name      = "reader"
 
-[role.fixer_med]
-tier      = "L2"
+[role.doer]
+tier      = "L0"
 reasoning = "medium"
-gate      = "3"
+ceiling   = "medium"
+gate      = "none"          # Fighters (a team): fill the bodies of a file set to the Leader's contract; a failure returns as a bug report
 tools     = ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
-name      = "opus_fixer_med"
-rename_to = "fixer_med"
+name      = "doer"
 
-# ---------------------------------------------------------------- bindings
+[role.oracle]
+tier      = "L3"
+reasoning = "high"
+ceiling   = "high"
+gate      = "escalate"      # Oracle: the Leader's last resort for hard problems; returns a better spec, never code bodies
+tools     = ["Read", "Bash", "Grep", "Glob", "Write"]
+name      = "oracle"
+
+# ---------------------------------------------------------------- providers
 #
-# One block per harness. `resolved` is the date the ids were last confirmed
-# against the vendor's live model list -- not the date this file was edited.
+# One block per provider. `resolved` is the date the ids were last confirmed against
+# the provider's live model list -- not the date this file was edited. `dial` is the
+# ordered list of [tier, effort] steps, weakest first; a role pins to one step and a
+# window [lo, hi] clamps roles into a sub-range.
 
-[binding.claude]
-L1       = "claude-sonnet-5"
-L2       = "claude-opus-5"
-L3       = "claude-opus-5"
+[binding.anthropic]
+L0       = "claude-haiku-5-5"
+L1       = "claude-sonnet-5-5"
+L2       = "claude-sonnet-5-5"
+L3       = "claude-sonnet-5-5"
 resolved = "2026-08-24"
-effort_key = "effort"                       # frontmatter key this harness reads
+effort_key = "effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
-note     = "L3 == L2 today. Splitting them (L3 -> a dedicated planning model) is a live proposal, not current state."
+dial     = [["L0", "low"], ["L0", "medium"], ["L1", "medium"], ["L3", "high"]]
+note     = "OPERATOR 2026-10-17: reader Haiku 5.5 low; doer (coder) Haiku 5.5 medium; Leader Sonnet 5.5 medium; Oracle Sonnet 5.5 high (L3 == Sonnet 5.5, no Opus). Supersedes the 2026-10-13 Opus oracle note below. Leader owns contracts (function headers); doer implements; Sonnet medium corrects. | L1 == L2 (Sonnet 5.5). L3 is Opus 5.5 at high effort by operator decision (2026-10-13), bound only to the Oracle: planning mode and problems the Leader cannot resolve. Supersedes the 2026-10-08 'never raise to Opus' rule for this role; Leader and Fighters stay on Sonnet/Haiku. UNVERIFIED until the Oracle is dispatched live on claude-opus-5-5."
 
-[binding.codex]
+[binding.openai]
+L0       = "gpt-5.4-mini"
 L1       = "gpt-5.4"
-L2       = "gpt-5-luna"
-L3       = "gpt-5-solr"
-resolved = "2026-08-24"
+L2       = "gpt-5.4"
+L3       = "gpt-6.1-sol"
+L3_alt   = "gpt-6.5-tierra"             # comparable to L3; either may fill the heavy tier
+resolved = "2026-10-08"
+effort_key = "model_reasoning_effort"
+effort_map = { low = "low", medium = "medium", high = "high" }
+dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L1", "high"], ["L3", "medium"], ["L3", "high"]]
+note     = "UNVERIFIED: ids supplied by operator. Probe 2026-10-08: the localhost:4000 proxy the live Codex config points at does NOT list gpt-5.4 (or any of these ids), so a `codex exec` probe must pass before any id here counts as verified. Operator preference: gpt-5.4 at low and medium effort for coding and orchestration; gpt-6.1-sol and gpt-6.5-tierra are comparable and both count as the high tier."
+
+# OpenRouter: one endpoint, many vendors. A role is pinned to a tier and an effort, never
+# to a model: the harness takes the first AVAILABLE model in the tier's candidate list
+# (GET https://openrouter.ai/api/v1/models, no key). Candidate order is operator-editable.
+[binding.openrouter]
+L0       = "anthropic/claude-haiku-5.5"
+L1       = "anthropic/claude-sonnet-5.5"
+L2       = "anthropic/claude-sonnet-5.5"
+L3       = "openai/gpt-5.6-sol"
+resolved = "2026-10-08"
+effort_key = "reasoning.effort"             # nested field in the request body; see note
+effort_map = { low = "low", medium = "medium", high = "high" }
+dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L1", "high"], ["L3", "medium"], ["L3", "high"]]
+note     = "Availability and reasoning/tools/reasoning_effort support confirmed 2026-10-08 against the live model list for every candidate below. NOT confirmed: the request-body field name (a live call has not been made), and capability ranking within a tier (candidates are operator choices, not measured). OpenRouter lists openai/gpt-5.6-sol, gpt-5.6-terra and gpt-6-astra, not the operator's Codex names gpt-6.1-sol / gpt-6.5-tierra."
+
+[binding.openrouter.candidates]
+light = ["anthropic/claude-haiku-5.5", "openai/gpt-5.4-mini", "deepseek/deepseek-v4-flash"]
+mid   = ["anthropic/claude-sonnet-5.5", "openai/gpt-5.4", "deepseek/deepseek-v4-pro"]
+heavy = ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra"]   # no Anthropic heavy: never raise to Opus
+
+# Ollama: local models only. Largest usable is 9B, so there is no distinct heavy model:
+# heavy = the mid model at high effort (the same trick as the anthropic binding).
+[binding.ollama]
+L0       = "qwen3.5-oc:2b"
+L1       = "qwopus-coding-thinking-256k:9b"
+L2       = "qwopus-coding-thinking-256k:9b"
+L3       = "qwopus-coding-thinking-256k:9b"
+resolved = "2026-10-08"
 effort_key = "reasoning_effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
-note     = "UNVERIFIED: ids supplied by operator, not confirmed against a live model list."
+dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L3", "high"]]
+note     = "L0 and L1 ids are present in ALL FOUR registries (ollama list, the localhost:4000 proxy, pi models.json, opencode.json), checked 2026-10-08; qwen3.5-oc:4b is not in pi or the proxy. Which of these is actually the best light/mid brain is unmeasured. Whether a given harness can express effort for an Ollama model is a per-harness question (pi: thinking field; opencode: no variant mapping known)."
 
-[binding.gemini]
+[binding.ollama.candidates]
+light = ["qwen3.5-oc:2b", "qwen3.5-oc:4b"]
+mid   = ["qwopus-coding-thinking-256k:9b", "qwen3.5-reasoning-thinking-256k:9b"]
+heavy = ["qwopus-coding-thinking-256k:9b"]               # same model, high effort
+
+[binding.google]
+L0       = ""
 L1       = ""
 L2       = ""
 L3       = ""
 resolved = ""
 effort_key = "thinkingBudget"
 effort_map = { low = "1024", medium = "8192", high = "24576" }
-note     = "UNBOUND: numeric thinking budget, not an enum. Adapter must emit ints, not strings."
+dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L3", "high"]]
+note     = "UNBOUND: numeric thinking budget, not an enum. gemini CLI is not installed on this machine (probe 2026-10-08), so nothing here can be live-verified."
 
-[binding.opencode]
-L1       = ""
-L2       = ""
-L3       = ""
-resolved = ""
-effort_key = "reasoningEffort"
-effort_map = { low = "low", medium = "medium", high = "high" }
-note     = "UNBOUND: opencode proxies many providers; binding depends on which provider is active."
+# ---------------------------------------------------------------- harnesses
+#
+# Which providers each harness can speak, how it spells a model id, and where its files
+# live. `model_fmt` placeholders: {provider} {id}. `agent_dir` / `config` / `settings` /
+# `doc` accept a leading ~ (home) and are resolved by render_agents.py. A harness with
+# no `providers` gets an instruction document only (no agent files): its native agent
+# format is unverified on this machine.
+
+# `verified` lists the providers whose template passed a LIVE probe (not just unit tests); the
+# generated headers say "UNVERIFIED" for any provider not listed. Evidence is in manifest.toml.
+
+[harness.claude]
+providers  = ["anthropic"]
+model_fmt  = "{id}"
+effort_key = "effort"
+agent_dir  = "claude/agents"            # the vault; sync-to-claude.ps1 copies it to ~/.claude/agents
+settings   = "~/.claude/settings.json"
+verified   = ["anthropic"]              # reader + oracle dispatched live; doer run as a Fighter via `claude -p --agent doer`
+
+[harness.codex]
+providers  = ["openai", "ollama"]
+model_fmt  = "{id}"
+effort_key = "model_reasoning_effort"
+agent_dir  = "~/.skills/codex-agents"   # the operator's convention; native loading is UNVERIFIED
+config     = "~/.codex/config.toml"     # profiles are the verified native path
+provider_refs = { openai = "copilot-proxy", ollama = "copilot-proxy" }
+
+[harness.opencode]
+providers  = ["openrouter", "ollama"]
+model_fmt  = "{provider}/{id}"
+agent_dir  = "~/.config/opencode/agents"
+config     = "~/.config/opencode/opencode.json"
+verified   = ["openrouter", "ollama"]   # `opencode debug agent` AND `opencode run` PONG, 2026-10-08
+
+[harness.pi]
+providers  = ["ollama", "openrouter"]
+model_fmt  = "{provider}/{id}"
+effort_key = "thinking"
+agent_dir  = "~/.pi/agent/agents"
+models     = "~/.pi/agent/models.json"
+settings   = "~/.pi/agent/settings.json"
+
+[harness.kiro]
+providers  = []
+doc        = "~/.kiro/steering/party.md"
+
+[harness.gemini]
+providers  = []
+doc        = "~/.gemini/GEMINI.md"
+
+[harness.hermes]
+providers  = []
+doc        = "~/AppData/Local/hermes/SOUL.md"
+
+# ---------------------------------------------------------------- scorers
+#
+# Not a tier and not a role: a local classifier a harness may call BEFORE
+# dispatch, to score a question about a request. It never answers the request.
+# Defined terms live in ~/.skills/GLOSSARY.md (JEV).
+
+[scorer.jev]
+model    = "hf.co/jetson-ai-lab/qwen3.5-0.8b-nvsh-tool-jev-scorer-v2-gguf:model-q4_k_m.gguf"
+pull     = "ollama pull hf.co/jetson-ai-lab/qwen3.5-0.8b-nvsh-tool-jev-scorer-v2-gguf:model-q4_k_m.gguf"
+runtime  = "ollama"                  # 752M params, Q4_K_M, ~529 MB; Modelfile TEMPLATE is bare {{ .Prompt }}
+resolved = "2026-10-08"
+mode     = "score one question, read P(yes) vs P(no) from next-token logprobs (needs raw=true + logprobs)"
+status   = "UNVALIDATED for routing"
+note     = "Card says it was fine-tuned for nvsh's Tier 2 operation scoring. Probe 2026-10-08, 8 requests x 5 handlers: one-letter multiple choice 0/8; per-handler yes/no 4/8 (chance 1.6/8), thin margins, debug handler never above 0.09. Needs a labeled set of >=20 requests with deterministic gold before any harness trusts its routing."
+
+# ---------------------------------------------------------------- escalation
+#
+# How many times the Leader may re-issue a file set at a Fighter-reported bug before it goes
+# to the Oracle. A parameter, not a feeling. Break-even: keep trying while
+#     P(the next attempt resolves it)  >  cost(Leader attempt) / cost(Oracle call)
+# with cost = tokens x price (and, separately, seconds) MEASURED per binding, because a tier
+# label does not give the ratio (openrouter: gpt-5.6-sol is cheaper per token than gpt-5.4).
+# P falls with each attempt: a bug that survived an attempt is harder than average.
+# The cap is the last attempt number k whose P(k) is still above the ratio.
+#
+# FOUND BY A LIVE ORACLE RUN (2026-10-08) and confirmed by running the code: that estimator is
+# absorbing. At cap 1 no attempt-2 row is ever logged, so the cap can never rise; at cap 0 no
+# Leader attempt is ever logged, so it can never recover. party_ledger.exploration_depth is the
+# fix: one exploratory attempt past the cap until that attempt number has min_samples tries, and
+# a re-open of attempt 1 after `explore_every` Oracle-only bugs (a demote, never a freeze).
+# Known, not yet fixed: cost_ratio is pooled across attempt numbers instead of c_L(k) / c_O(k),
+# and the Leader's own tokens are not in any usage block, so the Leader's per-attempt cost is
+# unmeasured today.
+
+[escalation]
+leader_attempts = 1        # default until ~20 logged bugs (attempts, outcome, tokens, seconds) say otherwise
+explore_every   = 10       # at cap 0, Oracle-only bugs between re-tries of attempt 1 (party_ledger.exploration_depth)
+measure_with    = ["output_tokens", "thinking_tokens", "total_cost_usd", "seconds"]   # the headless CLI's own usage block

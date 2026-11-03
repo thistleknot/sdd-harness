@@ -96,7 +96,8 @@ Max 4 subagents active. Rules: `rules/orchestration.md`.
 
 **13. Memory.** Lessons-learned is a supervised dataset, not a diary: state + action
 + observed outcome → the law it implies. A pattern earns a durable rule after ~3
-independent reuses. Unused patterns decay out. Update docs at the moment the decision
+independent-task reuses (recall or citation count is not reuse). Patterns with no helpful
+outcome decay out. Update docs at the moment the decision
 is made.
 
 **Rule changes.** Before adding or editing a durable rule, read it against the

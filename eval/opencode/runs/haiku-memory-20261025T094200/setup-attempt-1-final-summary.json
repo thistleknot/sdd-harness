@@ -1,0 +1,33 @@
+{
+  "verdict": "NOT TESTED",
+  "suite_directory": "C:/Users/user/.claude/.tmp/haiku-opencode-20261025T094200",
+  "case_statuses": {
+    "project_recall": "NOT TESTED (not run: blocked at gate 3)",
+    "session_isolation": "NOT TESTED (not run: blocked at gate 3)",
+    "missing_memory": "NOT TESTED (not run: blocked at gate 3)"
+  },
+  "gates": {
+    "1_deadline_and_state": "passed: launch.json deadline 1792947415; ~7 min remained at check",
+    "2_memory_health_and_model": "passed: 127.0.0.1:8055/health HTTP 200; qwen3.5-oc:2b listed in LiteLLM /v1/models",
+    "3_fixtures": "blocked: Write tool denied (dontAsk mode) and the shell hook forbids Python source written through Bash",
+    "4_workspaces_and_seeding": "not reached",
+    "5_private_server_18055": "not reached",
+    "6_direct_mcp_checks": "not reached",
+    "7_routing_overlay": "not reached",
+    "8_streaming_readiness_call": "not reached",
+    "9_capture_cases": "not reached",
+    "10_cleanup": "no owned processes started"
+  },
+  "first_blocker": "Gate 3: fixture-building Python source could not be written (Write denied under dontAsk mode; Bash Python writes blocked by PreToolUse hook). No fixtures, no server, no inference were run.",
+  "cleanup": "No owned processes were launched by this run; nothing to stop. Pre-existing process 1449260 (launch.json Haiku executor) was not touched.",
+  "files_changed": [
+    "C:/Users/user/.claude/.tmp/haiku-opencode-20261025T094200/final-summary.json"
+  ],
+  "uncertainties": [
+    "Prior status file plans/opencode-pre-smoke-status-20261025T094200.md does not exist; the CURRENT reconciliation step could not be performed against it.",
+    "Gate 2 health was checked on the production port 8055 only; the private port 18055 was not checked (gate 5 not reached).",
+    "Gate 2 did not rerun Harness regression tests, per plan.",
+    "Routing overlay (gate 7) feasibility is unverified; no inference was attempted, so the 2B model quality and scope isolation remain untested.",
+    "Deadline was 1792947415; the run stopped with roughly 6 minutes remaining, so even with the Write denial lifted, the three sequential captures at up to 120 s each would likely not fit."
+  ]
+}

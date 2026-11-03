@@ -180,12 +180,13 @@ After writing source code, `test_gen.py` prompts the agent to generate unit test
 
 ### Session Lifecycle
 
-Cross-session continuity without manual effort:
+Generated handoffs live at `~/memory-bank/handoffs/projects/<identity-hash>/prompt-<timestamp>.md` and carry the normalized `Project-URI` and source session ID. The Stop hook does not overwrite a workspace `prompt.md`.
 
-- **Handoff** (Stop) — writes `~/memory-bank/projects/<repo>/prompt.md` with objective, state, decisions, next steps
-- **Resume** (SessionStart) — injects that prompt.md as seed context in the next session
-- **Staleness guard** — the Stop hook won't overwrite a richer agent-written handoff (10-min recency check)
-- **Modes** — `handoff` (continue later), `migrate` (fresh context now), `close` (archive and done)
+Resume selects the newest readable candidate between the workspace prompt, Git-root prompt, and generated archives with the exact project identity; equal timestamps use normalized path order. It never falls back to the newest global archive or a shared repository basename.
+
+The manifest declares native lifecycle hooks for Claude and Kiro, and instruction-driven handoffs for pi and OpenCode. Check the manifest for each harness: lifecycle wiring is not universal, and declared wiring has not by itself been verified as a live cross-harness transfer.
+
+Use `handoff` to continue later, `migrate` to reseed a fresh context immediately, and `close` when no continuation is expected.
 
 ## The Constitution
 
@@ -297,17 +298,45 @@ Then reindex: `curl -X POST http://127.0.0.1:8765/reindex`
 └── README.md
 ```
 
-## Model Routing
+## The Party: agent settings across harnesses
 
-| Role | Claude Code | Local (opencode/pi via OpenRouter) |
-|------|-------------|-----------------------------------|
-| Orchestrator/Coder | claude-sonnet-5 | deepseek/deepseek-v4-flash |
-| Planner | claude-opus-5 | deepseek/deepseek-v4-flash |
-| Critic | claude-sonnet-5 | deepseek/deepseek-v4-flash |
-| Architect | claude-fable-5 | gemma-4-12B-agentic |
-| Worker | claude-haiku-4.5 | qwen3.5-oc:2b |
+Holding agent settings across harness platforms is what this directory is for. One design,
+rendered into each harness's native format:
 
-The adapter writes per-harness model configs from `harness.json`.
+- **Roles** (`tiers.toml`): the **Leader** (the session; plans, writes the contract, fixes
+  low-level spec bugs), a team of **Fighters** (`doer`; fill the bodies), the **Scout**
+  (`reader`) and the **Oracle** (`oracle`; the get-out-of-jail card, called only when the
+  Leader cannot resolve a problem). Flow and rules: `claude/rules/orchestration.md`.
+- **Providers are the wrapper layer.** Models are keyed by provider (`anthropic`, `openai`,
+  `openrouter`, `ollama`, `google`), each with its own dial of `(tier, effort)` steps. A harness
+  renders every provider template it can speak as a separate template. Never Opus.
+- **Squash rule** (`party.py`): roles whose model and effort coincide share one context, so no
+  hand-off. A window clamps the dial; fewer distinct steps means fewer, merged roles.
+
+```powershell
+cd ~/.harness
+python render_agents.py --harness all --plan                          # diffs for every harness, writes nothing
+python render_agents.py --harness opencode --provider ollama --apply  # one template; backups land in backups/<ts>/
+python render_agents.py --harness codex --window 0:2 --plan           # clamp the dial; squashes are reported
+python render_agents.py --harness claude --check                      # byte-exact identity of claude/agents/*.md
+python adapter.py --target agents [--apply]                           # same, via the adapter (opt-in, not in `all`)
+python diagrams/mermaid_to_infographic.py --party codex:openai        # draw a binding straight from tiers.toml
+```
+
+`--leader` additionally sets the session defaults (one provider only). Nothing is written without
+`--apply`; the engine (`harness_write.py`) backs up first, merges only the keys it owns, and never
+opens a file that holds credentials. Status as of 2026-10-08 (a harness counts as verified only when
+a live probe passed; the rows in `manifest.toml` carry the evidence):
+
+| Harness | Templates | Live status |
+|---|---|---|
+| claude | anthropic | `reader` and `oracle` dispatched, `doer` run as a Fighter via `--agent`; this long-lived session's registry did not re-add `doer` until restart |
+| opencode | openrouter, ollama | `debug agent` + `run` PONG for both |
+| codex | openai, ollama | profiles load; the localhost:4000 proxy serves neither template's models |
+| pi | ollama (openrouter needs a provider entry) | starts clean; subagent dispatch not exercised |
+| kiro, gemini, hermes | instruction document only | unverified (gemini CLI is not installed) |
+
+The measurement behind `[escalation] leader_attempts` lives in `party_ledger.py`.
 
 ## Cross-Harness Sync
 

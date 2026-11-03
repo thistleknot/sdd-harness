@@ -59,6 +59,10 @@ When plan mode produces a `plan.md`, use this structure:
 a recognised synonym (this state is natively called plan mode), but the artifact is
 `playbook.md`, not `plan.md`, and pending work is `[OPEN]`, not `[TODO]`.
 
+**It lives in the project, not the home dir.** `plansDirectory` is `.tmp/plans`, so plan
+mode writes `./.tmp/plans/<slug>.md` (scratch, gitignored). Promote anything durable to
+the spec dir (`.specs/`); never leave a plan in `~/.claude/plans/`.
+
 **And it is named for what it changes.** Plan mode mints `plans/<random-slug>.md`
 before anything is known about the work; that is a placeholder. REQ #36: the
 filename is the kebab slug of the artifact's own H1 (<= 6 words / 60 chars), and

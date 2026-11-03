@@ -50,23 +50,25 @@ A layer is a BARRIER: nothing in layer N+1 starts until every task in layer N is
 parallel siblings behind the sequential chain and breaks prompt-cache reuse across
 the fan-out.
 
-On the model ladder
--------------------
+On the party
+------------
 A hook CANNOT change the session model -- no such field exists in the hook output
 contract (checked against the official hooks reference: zero mentions of `model`).
-Only the operator can, via `/model`. So the tiering lives one level down, where it
-IS controllable: the `model` parameter on each subagent dispatch.
+So this hook never names a model at all. It names ROLES, and each role's model and
+effort come from ~/.harness/tiers.toml, rendered into the agent files by
+render_agents.py (the party: leader = the session, doer = Fighters, oracle).
 
-    ledger authorship -> fable   (widest view, writes the playbook, no code)
-    per-task subplan  -> opus    (large scope -> small internal scope)
-    implementation    -> sonnet  (executes the subplan, verifies)
+    ledger authorship -> the `oracle` agent  (widest view, writes the playbook, no code)
+    per-task subplan  -> the Leader          (the contract: signatures + docstrings)
+    implementation    -> a `doer` agent      (fills the bodies, verifies)
 
-Stuck goes UP one tier, one shot each: sonnet -> opus -> fable -> stop. Each tier
-appends its `_Blocked:` evidence to the ledger before handing up, because fable
-cannot re-scope a task it only knows failed -- it has to read what each tier hit.
+Stuck goes up the party: doer -> the Leader (one clarification) -> the `oracle`
+(replans). Each appends its `_Blocked:` evidence to the ledger before handing up,
+because the Oracle cannot re-scope a task it only knows failed -- it has to read what
+each hit. If the Oracle's replan does not clear it, the Leader decides and logs the basis.
 
-This is strictly better than switching the session model: the main session keeps
-whatever the operator set, and every task gets the full ladder regardless.
+The main session keeps whatever the operator set, and every task gets the full party
+regardless.
 
 Contract
 --------
@@ -344,8 +346,8 @@ def _status(payload: dict) -> int:
             advice = ("  Layer %s (%d open): declare it parallel or sequential before "
                       "dispatching." % (layer, open_here))
         if held:
-            advice += (" %d task%s BLOCKED -- it holds the barrier; escalate one tier "
-                       "(sonnet -> opus -> fable) before opening the next layer."
+            advice += (" %d task%s BLOCKED -- it holds the barrier; escalate one step "
+                       "(doer -> Leader -> oracle) before opening the next layer."
                        % (len(held), "" if len(held) == 1 else "s"))
 
     _emit(payload.get("hook_event_name") or "UserPromptSubmit",
@@ -370,10 +372,11 @@ def _architect_request(payload: dict) -> int:
 
     _emit("UserPromptSubmit", THINK_KEYWORD + """
 
-ARCHITECT REQUEST DETECTED. Author the ledger on the top tier, then hand down:
+ARCHITECT REQUEST DETECTED. Author the ledger with the Oracle, then hand down:
 
-  1. Do NOT draft it in this session. Dispatch ONE subagent with model="fable"
-     whose only job is to author the architecture. It writes no code.
+  1. Do NOT draft it in this session. Dispatch ONE subagent of type `oracle`
+     (its model and effort come from tiers.toml) whose only job is to author the
+     architecture. It writes no code.
   2. Its output lands in `playbook.md` at the repo root as a LAYERED ledger --
      `## Layer <n> - parallel|sequential` headings, and under each one
      `- [OPEN] T<n> <observable change>` with `_Files:` and `_Verify:`.
@@ -386,13 +389,13 @@ ARCHITECT REQUEST DETECTED. Author the ledger on the top tier, then hand down:
   5. On approval, work ONE LAYER at a time. A parallel layer fans its [OPEN]
      tasks out to fresh subagents at once (max %d, disjoint `_Files:`); a
      sequential layer runs them one by one. Await the ENTIRE layer before the
-     next. Each task runs the ladder: opus drafts the subplan -> sonnet
-     implements it. Stuck goes up one tier, one shot each -- sonnet -> opus ->
-     fable -> stop -- and each tier appends its `_Blocked:` evidence first.
+     next. Each task runs the party: the Leader (this session) writes the subplan
+     -> a `doer` agent implements it. Stuck goes up one step at a time -- doer ->
+     the Leader (one clarification) -> the `oracle` -- and each appends its
+     `_Blocked:` evidence first.
 
-A hook cannot switch this session's model, so the tiering happens per dispatch.
-If the operator wants the SESSION on fable too, they type /model -- say so once,
-do not ask twice.""" % MAX_PARALLEL)
+A hook cannot switch this session's model, so the tiering happens per dispatch, by
+agent type. The party's models live in ~/.harness/tiers.toml, never in this prompt.""" % MAX_PARALLEL)
     return 0
 
 

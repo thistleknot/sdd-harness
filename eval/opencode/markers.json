@@ -1,0 +1,11 @@
+{
+  "source": "~/.claude/.tmp/conflation/source-audit.md; RC-23, RC-26, RC-30",
+  "markers": [
+    "restoreBaseColors", "yearColorActive", "optuna_backtest_search.py",
+    "gl_str.txt", "patch_ctp2_images.py", "missing_details", "CTP2",
+    "AE Mod Base Scenario", "Call To Power 2", "jsonb graph design",
+    "Lever", "Greenhouse", "Asana"
+  ],
+  "excluded": ["litellm", "qwen", "codex", "harness", "skill", "graph"],
+  "rule": "Score answer text only; validate that no marker occurs in command/model/prompt metadata; re-read every flagged raw text before attributing task drift."
+}

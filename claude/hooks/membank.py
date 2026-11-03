@@ -399,19 +399,21 @@ def emit_loop_status(health: dict | None) -> None:
             # Missing or empty is a cache miss, not data loss: the events are
             # reconstructible from the Claude Code transcripts on disk.
             lines.append(
-                f"- Event cache is cold: {health['reason']}. Call the "
-                "`rebuild_event_cache` MCP tool; nothing is lost."
+                f"- Event cache is cold: {health['reason']}. Run "
+                "`C:\\Users\\user\\py310\\Scripts\\python.exe C:\\Users\\user\\.mcp\\memory-index\\backfill.py` "
+                "to rebuild it from the transcripts; nothing is lost."
             )
         else:
             lines.append(
                 f"- CAPTURE IS NOT RECORDING: {health['reason']}. New events are "
                 "being dropped. Fix write access to ~/memory-bank/events.sqlite3 — "
-                "past sessions are still rebuildable with `mem backfill`."
+                "past sessions are still rebuildable with "
+                "`C:\\Users\\user\\py310\\Scripts\\python.exe C:\\Users\\user\\.mcp\\memory-index\\backfill.py`."
             )
 
     # Distillation staleness. There is deliberately no scheduler: the agent decides
-    # when work is worth consolidating and calls the `distil_sessions` MCP tool
-    # (memory-bank server). A scheduler would have to guess that moment, and needs a
+    # when work is worth consolidating and runs the `mem dream` CLI (memory-index
+    # tool, `mem dream --since 7d`). A scheduler would have to guess that moment, and needs a
     # registration step nobody performs. What a hook CAN do is make the absence
     # visible -- nothing fires on a non-event, so this reports it once per session.
     try:
@@ -425,8 +427,8 @@ def emit_loop_status(health: dict | None) -> None:
             if not stamp:
                 lines.append(
                     f"- {health.get('events', 0)} captured events have never been "
-                    "distilled. Call the `distil_sessions` MCP tool (or "
-                    "`mem dream --since 7d`) when this session's work is done."
+                    "distilled. Run `mem dream --since 7d` when this session's "
+                    "work is done."
                 )
             else:
                 from datetime import datetime, timezone
@@ -437,8 +439,8 @@ def emit_loop_status(health: dict | None) -> None:
                 if days >= 2:
                     lines.append(
                         f"- Distillation last ran {days} days ago; captured events are "
-                        "accumulating unread. Call the `distil_sessions` MCP tool "
-                        "when this session's work is done."
+                        "accumulating unread. Run `mem dream --since 7d` when this "
+                        "session's work is done."
                     )
     except Exception:
         pass
@@ -450,9 +452,9 @@ def emit_loop_status(health: dict | None) -> None:
             if size > es.CAP_BYTES:
                 lines.append(
                     f"- Event cache is {size/1024**3:.1f} GiB, over the "
-                    f"{es.CAP_BYTES/1024**3:.0f} GiB cap. `distil_sessions` FIFO-prunes "
-                    "on its next run; evicted sessions stay rebuildable via "
-                    "`rebuild_event_cache`."
+                    f"{es.CAP_BYTES/1024**3:.0f} GiB cap. `mem dream --since 7d` "
+                    "is the distillation run; evicted sessions stay rebuildable via "
+                    "`C:\\Users\\user\\py310\\Scripts\\python.exe C:\\Users\\user\\.mcp\\memory-index\\backfill.py`."
                 )
         finally:
             conn.close()

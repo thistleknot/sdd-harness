@@ -1,0 +1,31 @@
+{
+  "model": "claude-haiku-5-5",
+  "started": 1792947769.2199993,
+  "deadline": 1792948369.2199993,
+  "cwd": "C:\\Users\\user\\.harness",
+  "pid": 1438848,
+  "command": [
+    "C:\\Users\\user\\.local\\bin\\claude.exe",
+    "-p",
+    "--model",
+    "claude-haiku-5-5",
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Read,Write,Edit,Bash,Grep,Glob",
+    "--tools",
+    "Read,Write,Edit,Bash,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "C:\\Users\\user\\.harness\\eval\\opencode\\runs\\haiku-memory-20261025T100500\\empty-mcp.json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--max-budget-usd",
+    "2",
+    "--add-dir",
+    "C:\\Users\\user\\.harness",
+    "C:\\Users\\user\\.mcp"
+  ]
+}

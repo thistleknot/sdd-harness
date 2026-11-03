@@ -1,3 +1,5 @@
+<!-- SUPERSEDED 2026-10-08. Historical record, not live doctrine. Describes the Opus three-gate ladder, retired when every tier collapsed onto Sonnet 5.5 effort rungs. Live control flow: rules/orchestration.md; model policy: ~/.harness/tiers.toml. -->
+
 # Orchestration Routing Rules
 
 > Two models, effort-tiered, three quality gates on the original plan, then a
@@ -20,7 +22,8 @@ Opus high   opus_planner: plan/spec (requirements, acceptance
             NEW plan/spec, NEVER fixes code itself. Bounded to
             at most 2 re-plan rounds before STOP.
 
-Sonnet low  orchestrator (you): route, implement code INLINE,
+Sonnet 5.5 medium  orchestrator (you): think, route, write the contract
+            (signatures + Google docstrings), implement INLINE by default,
             APPLY any Gate 1/2 proposed fix verbatim + rerun the
             check, enforce policies, sweep packets
 
@@ -200,6 +203,20 @@ when context must cross agents, the agentpacket path instead of inlined
 context. Parallel critics for independent modules are fine within the
 4-agent cap.
 
+Off-ladder doer (only when inlining the bodies would flood the orchestrator; a failure returns to the orchestrator, never re-dispatched):
+
+```
+sonnet_doer:      Agent(subagent_type="sonnet_doer", prompt="[contract file paths + exact verify command]", model="claude-sonnet-5-5", effort="low")
+```
+
+Off-ladder reader (read-only, not a gate, counts toward the 4-agent cap):
+
+```
+haiku_reader:     Agent(subagent_type="haiku_reader", prompt="[paths/glob + the question to answer]", model="claude-haiku-5-5", effort="low")
+```
+
+Its digest carries `file:line` pointers and is never a pass/fail verdict.
+
 ## Escalation Ladder
 
 **Original plan:**
@@ -228,7 +245,7 @@ a future session as orchestration guidance — it is the routing tree in the sam
 shape the orchestrator actually walks it.
 
 ```
-orchestrator (session, Sonnet-5 low)
+orchestrator (session, Sonnet-5.5 medium)
 ├─ IF trivial mechanical one-liner (typo, rename, no behavior change)
 │    └─ implement directly → DONE
 │

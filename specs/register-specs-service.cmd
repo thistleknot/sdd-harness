@@ -4,9 +4,9 @@ REM Run as Administrator.
 
 set NSSM=C:\Users\user\.pi\bin\nssm.exe
 set SVC=specs-mcp
-set PYTHON=C:\Users\user\py310\Scripts\python.exe
-set SCRIPT=C:\Users\user\.harness\specs\specs_mcp.py
-set WORKDIR=C:\Users\user\.harness\specs
+set PYTHON=F:\Python\mcp\specs\Scripts\python.exe
+set SCRIPT=C:\Users\user\.mcp\specs\specs_mcp.py
+set WORKDIR=C:\Users\user\.mcp\specs
 set LOGFILE=C:\Users\user\.harness\specs\specs-mcp.service.log
 
 %NSSM% stop %SVC% 2>nul

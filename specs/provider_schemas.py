@@ -1,4 +1,11 @@
-"""Cross-provider metadata and continuation schemas.
+"""| Stage | Mechanism | Contract |
+| INTEGRATE | Carry canonical project URI separately from display slug | [mandatory] R1 |
+
+Spec: docs/playbooks/memory-and-harness-integration.md R1.
+CLOSED: parallel registries or writers for the same feature.
+Preconditions and failure modes: see the governing spec and incumbent contract below.
+
+Cross-provider metadata and continuation schemas.
 
 Purpose: define the canonical envelope that all harnesses export/import for
 cross-harness resumability, plus adapter contracts for schema translation.
@@ -98,6 +105,7 @@ class ProviderIdentity(BaseModel):
 class WorkspaceIdentity(BaseModel):
     """Normalized workspace/repo state at envelope creation time."""
     root_uri: str = Field(description="Normalized absolute path or URI")
+    project_uri: str = Field(default="", description="Canonical common-repository/workspace URI; empty legacy values are not authorization")
     project_slug: str
     branch: str = ""
     base_commit: str = ""

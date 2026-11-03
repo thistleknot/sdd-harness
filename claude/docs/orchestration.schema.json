@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "claude-config://rules/orchestration.schema.json",
   "title": "Agent Orchestration Schema",
-  "description": "As-is schema of the 3-gate propose/apply pipeline plus a bounded re-plan loop (adopted 2026-07-24, same-day FOURTH revision): Opus-high plan/spec v1 -> orchestrator implements inline -> Gate 1 (Sonnet-medium critic, propose-if-confident) -> Gate 2 (Opus-low, propose) -> Gate 3 (Opus-medium, direct write) -> ladder exhausted -> Opus-high ALWAYS re-plans (v2, NEVER fixes code) -> orchestrator implements v2 -> Opus-medium direct fix if needed (no critic, no Gate 2) -> Opus-high re-plans once more (v3, TERMINAL) -> orchestrator implements v3 -> Opus-medium direct fix if needed -> STOP. Gates 1-2 never apply their own fixes; the orchestrator (already Sonnet-low) applies verbatim and reruns the exact check, avoiding an extra subagent spawn. Corrected same day (revision 4): an earlier draft let opus_planner 'repair OR re-scope' at the terminal step, which the user explicitly rejected — opus_planner must NEVER write or apply code, in any mode, at any round; its only output is a plan/spec, and the re-plan loop is bounded to 2 rounds with a lighter orchestrator+opus_fixer_med retry each round (no Gate 1/2, since the original plan is the more likely defect once the full ladder failed). Sources: CLAUDE.md, AGENTS.md, rules/orchestration.md, agents/*.md, plus live Anthropic pricing (2026-07-24 web search) and the observed runtime environment. Fields are provenance-tagged: [docs] = documented policy, [observed] = runtime state, [priced] = confirmed against live rate card. Doc/runtime disagreements live in 'discrepancies', not silently resolved.",
+  "description": "SUPERSEDED 2026-10-08: historical record of the Opus three-gate ladder, retired when every tier collapsed onto Sonnet 5.5 effort rungs (live: rules/orchestration.md, ~/.harness/tiers.toml). As-is schema of the 3-gate propose/apply pipeline plus a bounded re-plan loop (adopted 2026-07-24, same-day FOURTH revision): Opus-high plan/spec v1 -> orchestrator implements inline -> Gate 1 (Sonnet-medium critic, propose-if-confident) -> Gate 2 (Opus-low, propose) -> Gate 3 (Opus-medium, direct write) -> ladder exhausted -> Opus-high ALWAYS re-plans (v2, NEVER fixes code) -> orchestrator implements v2 -> Opus-medium direct fix if needed (no critic, no Gate 2) -> Opus-high re-plans once more (v3, TERMINAL) -> orchestrator implements v3 -> Opus-medium direct fix if needed -> STOP. Gates 1-2 never apply their own fixes; the orchestrator (already Sonnet-low) applies verbatim and reruns the exact check, avoiding an extra subagent spawn. Corrected same day (revision 4): an earlier draft let opus_planner 'repair OR re-scope' at the terminal step, which the user explicitly rejected — opus_planner must NEVER write or apply code, in any mode, at any round; its only output is a plan/spec, and the re-plan loop is bounded to 2 rounds with a lighter orchestrator+opus_fixer_med retry each round (no Gate 1/2, since the original plan is the more likely defect once the full ladder failed). Sources: CLAUDE.md, AGENTS.md, rules/orchestration.md, agents/*.md, plus live Anthropic pricing (2026-07-24 web search) and the observed runtime environment. Fields are provenance-tagged: [docs] = documented policy, [observed] = runtime state, [priced] = confirmed against live rate card. Doc/runtime disagreements live in 'discrepancies', not silently resolved.",
   "type": "object",
   "required": ["orchestrator", "agents", "pipeline", "routing", "escalation", "policies", "context_guardrails", "harness_agents", "model_registry", "pricing", "discrepancies"],
   "properties": {
@@ -15,7 +15,7 @@
         "model": {
           "description": "[docs] pin the role to claude-sonnet-5 at low effort; [observed] set via /model on 2026-07-24 (resolves prior discrepancy D1).",
           "const": {
-            "documented": { "model": "claude-sonnet-5", "effort": "low" },
+            "documented": { "model": "claude-sonnet-5-5", "effort": "medium" },
             "observed_current_session": "claude-sonnet-5"
           }
         },
@@ -41,11 +41,33 @@
     },
 
     "agents": {
-      "description": "Spawnable subagents registered in agents/*.md. Exactly these four. Per-agent 'effort' is set via the supported frontmatter key (verified: low|medium|high|xhigh|max, overrides session effort). Opus backs three distinct effort tiers. opus_fixer_med has two invocation contexts (see its invoke_for) but is still one agent definition, not two.",
+      "description": "Spawnable subagents registered in agents/*.md. Exactly these six: four ladder agents plus the off-ladder haiku_reader and sonnet_doer. Per-agent 'effort' is set via the supported frontmatter key (verified: low|medium|high|xhigh|max, overrides session effort). Opus backs three distinct effort tiers. opus_fixer_med has two invocation contexts (see its invoke_for) but is still one agent definition, not two.",
       "type": "object",
-      "required": ["opus_planner", "sonnet_critic", "opus_fixer_low", "opus_fixer_med"],
+      "required": ["opus_planner", "sonnet_critic", "opus_fixer_low", "opus_fixer_med", "haiku_reader", "sonnet_doer"],
       "additionalProperties": false,
       "properties": {
+        "sonnet_doer": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-sonnet-5-5" },
+            "effort": { "const": "low" },
+            "cost_profile": { "const": "low" },
+            "role": { "const": "off-ladder body-filler: implements bodies to an orchestrator-written contract, runs the verify command, one attempt" },
+            "tools": { "const": ["Read", "Edit", "Write", "Bash", "Grep", "Glob"] },
+            "note": { "const": "Dispatched only when inlining would flood the orchestrator. Signatures and docstrings are read-only to it. A failure returns to the orchestrator (Sonnet 5.5 medium), never re-dispatched." }
+          }
+        },
+        "haiku_reader": {
+          "type": "object",
+          "properties": {
+            "model": { "const": "claude-haiku-5-5" },
+            "effort": { "const": "low" },
+            "cost_profile": { "const": "lowest" },
+            "role": { "const": "off-ladder reader/summarizer — read-only, never a gate" },
+            "tools": { "const": ["Read", "Grep", "Glob"] },
+            "note": { "const": "Returns a digest with file:line pointers. Cannot run anything, so its output is never evidence of pass/fail; gates and the orchestrator re-read raw lines before any verdict." }
+          }
+        },
         "opus_planner": {
           "type": "object",
           "properties": {
@@ -259,7 +281,8 @@
             "claude-sonnet-5": "Claude 5 family; documented AND observed orchestrator model (low, and the universal fix-executor for Gates 1-2), backs sonnet_critic (medium, Gate 1)",
             "claude-fable-5": "retired from the roster 2026-07-24 — previously backed fable_planner and the orchestrator session",
             "claude-opus-4-8": "retired from the roster 2026-07-24 — superseded by claude-opus-5, previously backed opus_decomposer",
-            "claude-haiku-4-5-20251001": "retired from the roster 2026-07-15"
+            "claude-haiku-4-5-20251001": "retired from the roster 2026-07-15",
+            "claude-haiku-5-5": "Claude 5.5 family; backs haiku_reader (low, off-ladder read/summarize, read-only)"
           }
         },
         "effort_mechanism": { "const": "per-agent 'effort' frontmatter key in agents/*.md (low|medium|high|xhigh|max), overrides session effort — verified against Claude Code docs" }

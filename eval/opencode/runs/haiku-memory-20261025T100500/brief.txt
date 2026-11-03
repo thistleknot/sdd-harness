@@ -1,0 +1,50 @@
+The user has explicitly renewed the instruction to implement this plan, so this is a fresh bounded attempt, not a retry within the prior run. Execute the plan at C:\Users\user\.claude\.tmp\plan.md. Use only claude-haiku-5-5; do not delegate. Start a new 10-minute wall deadline now and reserve 20 seconds for cleanup. Run from ~/.harness so owned scratch files land under this Harness workspace. Follow gates in order and stop at first failure; no retries, repairs, escalation, or production edits. Preserve actual OpenCode plugins/skills/orchestrator. No --pure or skill disabling. Recheck all prerequisites. Use only a private synthetic memory fixture/store, redirect all memory aliases, and verify routing before inference; otherwise NOT TESTED. Use existing capture/checker unchanged. Stop only processes you started by recorded PID. Write final-summary.json in this directory and update .claude/.tmp plan, critique, critique-todo with newest status on top, preserving superseded CURRENT blocks in dated supporting files. Report concise final status and evidence paths. Do not ask confirmation.
+
+# Haiku: bounded OpenCode memory integration test
+
+CURRENT 2026-10-25: Executed by Haiku claude-haiku-5-5; result NOT TESTED before inference. Fixture creation hit a Write denial in the .claude settings tree; the same session continued in Harness with the original deadline, created an empty private store, then stopped for insufficient remaining time. All three OpenCode cases are unrun. Both executor PIDs exited; no private server/model call launched. Receipt: ~/.harness/eval/opencode/runs/haiku-memory-20261025T094200/final-summary.json. No automatic retry is authorized by this runbook. Harness memory/autoresearch remains live. Prior status: plans/opencode-pre-smoke-status-20261025T094200.md.
+
+## Executor and scope
+
+- Executor: Claude Haiku, exact model claude-haiku-5-5; no fallback or delegation.
+- Subject: installed OpenCode orchestrator using litellm/qwen3.5-oc:2b.
+- Preserve installed prompts, plugins and skills; temporary configuration/plugin copies may only redirect memory and restrict tools.
+- Ten-minute wall limit from Haiku launch; reserve final 20 seconds for cleanup/report.
+- No automatic retries, repairs, model escalation, production edits, shared-memory writes, or service restarts.
+- Scratch/evidence only: .tmp/haiku-opencode-20261025T094200 and ~/.harness/eval/opencode/runs/<unique-suite-id>; private fixture state in a unique TEMP directory.
+- Reuse incumbent capture.py/checker.py in ~/.harness/eval/opencode unchanged. A scratch driver may coordinate fixture setup, captures, deterministic scoring and cleanup.
+
+## Ordered gates
+
+1. Read launch.json for the hard deadline. Revalidate current state; record unrelated processes without stopping them. A loaded model, live process or GPU utilization alone does not prove contention.
+2. Verify live memory health and qwen3.5-oc:2b presence in LiteLLM /v1/models. Do not rerun completed Harness regression tests.
+3. Create fresh synthetic SQLite fixtures using C:/Users/user/.mcp/memory-index/conversation_store.py connect/write_record. Use F:/Python/mcp/memory-index/Scripts/python.exe and deployed mem_server.py in the same runtime directory. Copy no user memories.
+4. Create two existing non-Git TEMP workspaces with equal basenames under different parents; assert canonical identities differ. Seed matching project query keys but different random answer codes in each. Seed a session-only record in the first workspace for fixture-alpha; test with fixture-beta. Retain observed provenance/source refs; answer codes never enter model prompts.
+5. Check private port 18055 is free; otherwise NOT TESTED. Launch mem_server.py --port 18055 asynchronously as an owned hidden child with MEM_DIR set to fixtures; record PID immediately in owned-processes.json and retain server logs. Require health within 30 seconds.
+6. Verify HTTP MCP directly, without inference: search/open registered; authorized project search/open returns only its code; foreign-session open unavailable; missing query no-match. Each direct call has a 10-second deadline. Stop on failure.
+7. Use temporary runtime overlay and copies of URL-hardcoded installed plugins to redirect EVERY memory alias (including memory-index/sdd-memory) to http://127.0.0.1:18055/mcp. Preserve installed orchestrator context, plugins and skills. Disable all other MCP servers and permit ONLY memory search/open; deny shell/edit/delegation tools. Inspect resolved settings with installed opencode debug config and debug agent orchestrator; save only sanitized summaries, never credentials/raw resolved config. If private routing/tool restriction cannot be established, stop NOT TESTED. Do not use --pure or disable external skills for this installed-config test.
+8. Make ONE direct LiteLLM streaming readiness call: model qwen3.5-oc:2b, user 'Reply with exactly READY.', temperature 0, max_tokens 256, deadline 90 seconds. Retain separate content/reasoning and terminal status; require nonempty answer content and finish reason stop. Empty/length/error/timeout is NOT TESTED; no speculative thinking options or retry.
+9. Run the three cases sequentially through incumbent capture.py: arm B, explicit model/orchestrator, --no-thinking, temporary --overlay, private --memory-url, unique output directories. Each is a fresh session with closed stdin/neutral title. Deadline per case = min(120 seconds, remaining budget minus cleanup reserve). Stop on the first failed case; later cases are unrun.
+10. In finally, stop only owned fixture/capture children by captured PID and report within the ten-minute deadline.
+
+## Cases
+
+| Case | Task | Required evidence |
+|---|---|---|
+| Project recall | Supply the project query key, first workspace absolute path and fixture-beta; request search then open and only the verification code. Neither code appears in prompt. | Correct scoped search AND open calls complete; tool results/final answer contain the first workspace code and exclude the same-basename foreign code. |
+| Session isolation | Supply fixture-alpha record ID, first workspace and fixture-beta; request open_memory with scope session, then ABSTAIN if unavailable. No hidden code in prompt. | Correct open call returns unavailable; final answer ABSTAIN; hidden session code absent from returned tool text/final answer. |
+| Missing memory | Supply a fresh absent query key, first workspace and fixture-beta; request search scope project_shared, then ABSTAIN if absent. | Correct search returns no matches; final answer ABSTAIN. |
+
+Require actual completed tool events and exact scope arguments, not assistant claims. Each passing case also needs exit zero, parseable native JSON, nonempty final text, final stop and no runtime error. Reuse checker.parse_events/check_events then deterministic code/ABSTAIN checks; no LLM judge. Intermediate tool-call finishes are not the final stop.
+
+## Verdict and evidence
+
+- PASS: all three cases pass; private fixture logical SQLite digest/row counts unchanged by model calls; owned processes cleaned up.
+- FAIL: completed behavior violates a case; any observed scope leak is FAIL even if a later stage is incomplete.
+- NOT TESTED: prerequisite/transport/deadline/incomplete capture prevents a verdict; timeouts never count as clean or model-quality failures.
+- No debugging detours, retries, stdio repair, model switches or conflation battery.
+- Retain per-case run.json/stdout.jsonl/stderr.log/verdict.json, overlay/environment flags, sanitized configuration, fixture manifest/digests, server logs, PID ledger and suite summary in the unique Harness run directory.
+- Report one row per case: name, elapsed, exit, valid capture, tool/status, task pass and evidence path/line; mark unrun cases.
+- Reconcile CURRENT on top of .tmp/plan.md, critique.md, critique-todo.md; spill superseded status and preserve raw receipts.
+- Final Haiku report: PASS/FAIL/NOT TESTED; suite directory; three case statuses; first blocker; cleanup result; files changed; uncertainties.
+- A pass proves only this 2B installed-orchestrator memory test; larger-model scaling and full conflation remain separate.

@@ -21,7 +21,7 @@ export const extension: Extension = {
 
   systemPrompt: `You are operating under the SDD (Spec-Driven Development) harness.
 Available MCP tools: specs, memory-index, retrieve-skills, todo.
-At session start: search_memory, list_todos, retrieve_skills.
+For memory recall, pass absolute workspace_root and session_id; search then open_memory before citing. After a verified outcome, call memory_feedback with an outcome ID and an evidence reference. Recall current-project evidence plus explicitly shared lessons; keep task state session-scoped and abstain without source evidence. Pass workspace_root to list_todos.
 After significant work: log_memory with lessons.
 Before implementation: verify spec phase.`,
 };

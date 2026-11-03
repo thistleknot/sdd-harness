@@ -20,7 +20,7 @@ description: >
 2. **Commit history**: path-scoped `git log`, pickaxe for the changed behavior
 3. **Prior evidence**: successful run artifacts, logs, exact commands/hashes
 4. **Repository docs**: AGENTS.md, active plans, lessons_learned
-5. **Memory search**: `search_memory("<concrete failure mechanism>")`
+5. **Memory search**: `search_memory("<concrete failure mechanism>", workspace_root=<absolute_workspace>, session_id=<session>)`
 6. **Diff against last good**: identify earliest behavioral divergence
 7. **Restore before innovate**: smallest restoration of proven mechanism first
 

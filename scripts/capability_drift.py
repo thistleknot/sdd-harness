@@ -114,6 +114,14 @@ def build_report(root: Path = ROOT) -> tuple[list[str], list[str]]:
 
     for cell in skill_cells:
         name = cell["harness"]
+        expected = adapter.skill_projection_contract(name)
+        if expected['strategy'] != cell['strategy']:
+            issues.append(f'skills/{name}: strategy differs from adapter')
+        if expected['strategy'] != 'SKIP':
+            if cell.get('transport') != expected['transport']:
+                issues.append(f'skills/{name}: transport differs from adapter')
+            if Path(cell.get('target', '')).resolve() != Path(expected['target']).resolve():
+                issues.append(f'skills/{name}: destination differs from adapter')
         if cell["strategy"] == "SKIP":
             reason = cell.get("reason", "").strip()
             if not reason:

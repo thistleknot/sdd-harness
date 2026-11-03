@@ -40,6 +40,10 @@ gate does not fire on them, and they should be deleted, not preserved.
 | *.md | policy/ | docs | none | Named policies referenced by rules (plan mode, and later siblings). |
 | ** | instructions/ | docs | none | Per-harness instruction fragments emitted by the adapters. |
 | README.md | / | docs | none | What this tree is, for a reader who has never seen it. |
+| future_directions.md | / | docs | none | Directions considered but not adopted, each with its evidence and open questions. |
+| testmd.md | / | docs | none | Probe prompt a downstream harness answers to show which steering, rules, MCP servers and hooks it can actually see. |
+| playbook.md | / | docs | none | Conceptual design for the current campaign (now: routing features through the agentic-kanban board). First stage: playbook, then specs, then plan.md, then the board. |
+| plan.md | / | docs | read-only | Generated view of the agentic-kanban board for the current campaign (open, doing, done). The board is the source of truth; its render_plan tool writes this file. Change it through the board (add_lesson, or import a fresh plan), or flip this row back when starting a new campaign. Name fixed by operator instruction. |
 | *.md | docs/playbooks/ | docs | named-for-intent | Task ledgers an operator works through, one per campaign, in the playbook format. |
 
 ## Spec surface — requirements, design, and the record store
@@ -93,12 +97,15 @@ gate does not fire on them, and they should be deleted, not preserved.
 | ** | plugin/ | code | spec-attribution | Distributable Claude Code plugin: hooks and skills. |
 | ** | agents/ | config | none | Agent definitions rendered into each harness's roster. |
 | ** | mcp/ | code | spec-attribution | MCP servers this harness registers. |
-| render_agents.py | / | code | spec-attribution | Renders `agents/` into per-harness frontmatter. |
+| render_agents.py | / | code | spec-attribution | Renders the party (roles x provider templates) into every harness's native agent settings. |
+| party.py | / | code | spec-attribution | Resolves the party's roles against a provider's dial: window clamp and the squash rule. |
 | harness_write.py | / | code | spec-attribution | Safe writes into live harness config: dry-run, backup, merge-only, secret and denylist guards. |
 | board.py | / | code | spec-attribution | SQLite store behind the agentic-kanban feature board: features, stories, dependencies, the story state machine, project keying. |
 | worktrees.py | / | code | spec-attribution | One git worktree per story: create, diff, merge on accept, remove on cancel. |
 | board_mcp.py | / | code | spec-attribution | The agentic-kanban MCP server: board tools over stdio, driving board.py and worktrees.py. |
 | ** | board/ | data | machine-state | board.db: the shared feature-board database, one file for every project on this machine. |
+| party_ledger.py | / | code | spec-attribution | Measurement ledger behind tiers.toml [escalation] leader_attempts: attempts, rates, break-even cap. |
+| party-runs.jsonl | ledger/ | data | machine-state | One JSON line per attempt at a Fighter-reported bug; appended by party_ledger.record. |
 | ** | backups/ | data | machine-state | Timestamped copies of live config files replaced by render_agents.py --apply. Disposable once the change is trusted. |
 | migrate_rules.py | / | code | spec-attribution | One-shot migration of rules between layouts. |
 | setup.py | / | code | spec-attribution | Installs the harness onto a new machine. |
@@ -122,9 +129,9 @@ gate does not fire on them, and they should be deleted, not preserved.
 | ** | events/ | data | machine-state | Captured lifecycle events. Machine-managed, never hand-edited. |
 | ** | slop-review/ | docs | none | Findings from instruction-surface audits. |
 | inspirations.md | / | docs | none | Sources the harness borrowed from, with what was taken. |
+| ** | inspirations/ | docs | none | Longer notes behind `inspirations.md`. |
 | features.md | .mtp/ | docs | read-only | Source-linked feature harvest and current dispositions from five external agent repositories; change only when new source or implementation evidence supersedes a finding. |
 | features-todo.md | / | docs | named-for-intent | OPEN/DOING/DONE execution view for adopted harvested capabilities; Specs DB and kanban remain authoritative. |
-| ** | inspirations/ | docs | none | Longer notes behind `inspirations.md`. |
 | .gitignore | / | config | none | What never enters the vault. |
 
 ## Scratch and detritus
@@ -143,3 +150,7 @@ gate does not fire on them, and they should be deleted, not preserved.
 | ** | references/ | data | none | Cloned reference repos. Large, not ours, gitignored. |
 | ** | hookhub-reference/ | data | none | Cloned hook reference. Not ours, gitignored. |
 | *.png | / | asset | none | Diagrams referenced from the docs above. |
+| mermaid_to_infographic.py | diagrams/ | code | spec-attribution | Renders a party flowchart (Mermaid in Markdown) as an infographic SVG: model columns, effort rows. |
+| test_mermaid_to_infographic.py | diagrams/ | test | spec-attribution | Battery for the infographic renderer. |
+| *.md | diagrams/ | doc | none | Mermaid sources and the color key; inputs to the renderer. |
+| *.svg | diagrams/ | asset | none | Generated infographics. Regenerate with the renderer, do not hand-edit. |

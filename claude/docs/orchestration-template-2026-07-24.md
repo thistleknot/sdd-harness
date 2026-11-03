@@ -1,3 +1,5 @@
+<!-- SUPERSEDED 2026-10-08. Historical record, not live doctrine. Describes the Opus three-gate ladder, retired when every tier collapsed onto Sonnet 5.5 effort rungs. Live control flow: rules/orchestration.md; model policy: ~/.harness/tiers.toml. -->
+
 # Orchestration Map
 
 ```

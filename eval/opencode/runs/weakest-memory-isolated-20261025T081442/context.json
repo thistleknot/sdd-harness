@@ -1,0 +1,10 @@
+{
+  "shared_before": "{\"hash\": \"598c5de4a7f4f014fc88aacb51ab047307f18ec0f2bd653b4c80c6cf76d4cdda\", \"count\": 130}",
+  "overlay": "C:\\Users\\user\\AppData\\Local\\Temp\\opencode-memory-isolated-overlay-20261025T081442.json",
+  "shared_after": "{\"hash\": \"598c5de4a7f4f014fc88aacb51ab047307f18ec0f2bd653b4c80c6cf76d4cdda\", \"count\": 130}",
+  "env": {
+    "OPENCODE_DISABLE_EXTERNAL_SKILLS": 1,
+    "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": 1
+  },
+  "run": "eval\\opencode\\runs\\weakest-memory-isolated-20261025T081442"
+}

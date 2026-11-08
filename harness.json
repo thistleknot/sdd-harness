@@ -52,6 +52,11 @@
   "global_hooks": {
     "claude": [
       {
+        "event": "UserPromptSubmit",
+        "command": "python C:/Users/user/.harness/hooks/plan_do_route.py",
+        "timeout": 10
+      },
+      {
         "event": "PreToolUse",
         "matcher": "Bash|Grep",
         "command": "F:/Python/uv-tools/bin/graphify.EXE hook-guard search",
@@ -89,6 +94,31 @@
       "architect": "hf.co/huihui-ai/Huihui-gemma-4-12B-agentic-fable5-abliterated-GGUF:Huihui-gemma4-v2-abliterated-Q8_0.gguf",
       "worker": "qwen3.5-oc:2b"
     }
+  },
+  "skill_packages": {
+    "_comment": "Canonical skill packages projected by adapter.py --target skills when --skill is omitted. Source: ai-unified-process/aiup-core@3.13.0 (Tessl), copied into the skill master (~/.skills).",
+    "packages": [
+      "acceptance-protocol",
+      "architecture-decision",
+      "business-process",
+      "entity-model",
+      "next",
+      "open-questions",
+      "release-notes",
+      "requirements",
+      "reverse-engineer",
+      "spec-review",
+      "stack",
+      "test-case",
+      "test-case-coverage",
+      "test-case-implement",
+      "use-case-coverage",
+      "use-case-diagram",
+      "use-case-implement",
+      "use-case-spec",
+      "use-case-test",
+      "user-guide"
+    ]
   },
   "memory": {
     "default_scope": "project_shared",

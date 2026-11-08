@@ -1,4 +1,4 @@
-<!-- NO GOVERNING SPEC. Basis: operator request 2026-10-01 ("write this as a playbook-harness-sdd.md ... so I can get to this tomorrow morning and have sdd implemented for use with codex"). Row: .specs/file-manifest.md, docs/playbooks/. Promote to tasks.md before anything here is depended on. -->
+﻿<!-- NO GOVERNING SPEC. Basis: operator request 2026-10-01 ("write this as a playbook-harness-sdd.md ... so I can get to this tomorrow morning and have sdd implemented for use with codex"). Row: .specs/file-manifest.md, docs/playbooks/. Promote to tasks.md before anything here is depended on. -->
 
 # Playbook: SDD on Codex CLI
 
@@ -32,7 +32,7 @@ So the skills are installed, the MCP servers are not wired, and there is no stee
 2. Work through Layer 1, then Layer 2. Stop there if you only want SDD on Codex.
 3. Layer 3 is the OpenHarness question. Do it only if you want enforcement.
 
-## Layer 1 — parallel
+## Layer 1 â€” parallel
 
 - [OPEN] T1 Put the constitution and rules in one steering file Codex can read
   _Files:_ instructions/codex.md, ~/.codex/AGENTS.md
@@ -49,7 +49,7 @@ So the skills are installed, the MCP servers are not wired, and there is no stee
   _Basis:_ `model_routing` names Claude models only. Collapse to one planner and one worker from the gateway, using the existing `local` block as the shape.
   _Verify:_ `python render_agents.py --check` passes, and `codex exec -m <WORKER> "reply PONG"` returns PONG.
 
-## Layer 2 — sequential
+## Layer 2 â€” sequential
 
 - [OPEN] T4 Record Codex as a harness in the capability matrix
   _Files:_ manifest.toml
@@ -66,7 +66,7 @@ So the skills are installed, the MCP servers are not wired, and there is no stee
   _Basis:_ one passing prompt against a stochastic agent is noise, so use three: a feature request, a typo fix (should skip the spec), a bug report (should just fix).
   _Verify:_ the feature request makes Codex draft a spec and call the specs MCP before writing code; the typo fix does not.
 
-## Layer 3 — parallel (optional: can the harness block writes?)
+## Layer 3 â€” parallel (optional: can the harness block writes?)
 
 - [OPEN] T7 Test whether OpenHarness honors a deny hook
   _Files:_ none (scratch repo under `.tmp/`)
@@ -78,7 +78,7 @@ So the skills are installed, the MCP servers are not wired, and there is no stee
   _Basis:_ `codex_hooks` is `under development` in 0.121.0. Enable it in the scratch repo only: `codex features enable codex_hooks`.
   _Verify:_ a pre-tool hook that exits with a deny stops `codex exec "create file x.txt"` and `x.txt` does not exist.
 
-## Layer 4 — sequential
+## Layer 4 â€” sequential
 
 - [OPEN] T9 Record what Layer 3 found and pick the runtime
   _Files:_ manifest.toml, docs/playbooks/playbook-harness-sdd.md
@@ -91,3 +91,43 @@ So the skills are installed, the MCP servers are not wired, and there is no stee
 - Whether `gpt-5.4` exists at work.
 - Whether OpenHarness installs on the work machine.
 - Whether either runtime accepts a Claude-format deny hook.
+
+
+## Design layer — integrated 2026-11-07 (supersedes the two-resource note)
+
+Governing spec: REQ #73 / task #94; receipts: `docs/playbooks/sdd-integration-{plan,receipts,worklog}-2026-11-07.md`.
+The chain now CONSUMES all inherited material, not just cites it:
+
+- Feeder gate: `policy/triage.md` — five size lanes (mechanical / bug / small feature /
+  data-model-touching feature / greenfield), append-only `docs/INTAKE.md`, maintenance
+  strategy per artifact: speckit = spec-first, AIUP UC files = spec-anchored, pyecoregen
+  output = spec-as-source.
+- sw-design's 6 stages extended: PRODUCT.md invariants (Warp), AI-Context blocks in
+  needs (DDSE), CDR/ADR decision records + design.md + TECH.md at stage 3, entity model
+  nested in design.md until >10 entities (Kiro/AIUP boundary), EAnnotation decision
+  citations at stage 5, GENERATED-FROM-.ECORE headers at stage 6 (Tessl pattern).
+- Decision convention live: ADR/CDR/EDR/IDR title prefixes + four-label AI-Context block;
+  WARN-only checker `scripts/check_decision_convention.py` wired into `scripts/verify.ps1`
+  (reads the LIVE specs DB at `~/.mcp/specs/specs.db` — the `~/.harness/specs/specs.db`
+  copy is a stale duplicate).
+- New skill `validate-changes-match-specs`: one diff vs PRODUCT/TECH invariants;
+  computer-use lane through the incumbent headless-browser-verification skill.
+- pi-sdd-kit adopted as DELTAS only (idea/review/status/steering + handoff); wholesale
+  install rejected (options analysis, decisions #36-39). Anioko = taxonomy source;
+  book = study library (CC BY-NC-SA, internal only).
+- Deferred with reason: pyecoregen header-annotation script, Tessl codex-distribution
+  trial (scratch install), CI enforcement wiring (until playbook T5 lands).
+
+## Decision gate wiring (V2-W2, 2026-11-07)
+
+Enforcement placement, settled by the second pass: the harness DEFINES the decision
+convention (format checker: scripts/check_decision_convention.py - static, allowlist,
+lifecycle, label-only-CDR; never executes anything). Each PROJECT enforces at its own
+gate: copy scripts/decision_gate.py into the repo, keep decisions.md
+(Decision: D-<id> [Status] verify: <allowlisted command>) and optional waivers.md
+(D-<id> scope=<text> expires=<YYYY-MM-DD>), run the gate from pre-commit or CI.
+Commands outside the allowlist are refused, never executed. Proposed decisions are
+skipped; Accepted decisions run; a failing Accepted decision FAILS the gate unless a
+non-expired waiver covers its exact scope - expired waivers re-fail by design.
+Fixture proof: .tmp/decision-gate-fixture (FAIL -> PASS -> expired-waiver FAIL ->
+active-waiver WAIVED -> clean PASS).

@@ -89,8 +89,8 @@ tools     = ["Read", "Grep", "Glob"]
 name      = "reader"
 
 [role.doer]
-tier      = "L0"
-reasoning = "medium"
+tier      = "L1"
+reasoning = "low"
 ceiling   = "medium"
 gate      = "none"          # Fighters (a team): fill the bodies of a file set to the Leader's contract; a failure returns as a bug report
 tools     = ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
@@ -120,7 +120,7 @@ resolved = "2026-08-24"
 effort_key = "effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
 dial     = [["L0", "low"], ["L0", "medium"], ["L1", "medium"], ["L3", "high"]]
-note     = "OPERATOR 2026-10-17: reader Haiku 5.5 low; doer (coder) Haiku 5.5 medium; Leader Sonnet 5.5 medium; Oracle Sonnet 5.5 high (L3 == Sonnet 5.5, no Opus). Supersedes the 2026-10-13 Opus oracle note below. Leader owns contracts (function headers); doer implements; Sonnet medium corrects. | L1 == L2 (Sonnet 5.5). L3 is Opus 5.5 at high effort by operator decision (2026-10-13), bound only to the Oracle: planning mode and problems the Leader cannot resolve. Supersedes the 2026-10-08 'never raise to Opus' rule for this role; Leader and Fighters stay on Sonnet/Haiku. UNVERIFIED until the Oracle is dispatched live on claude-opus-5-5."
+note     = "OPERATOR 2026-10-17: reader Haiku 5.5 low; doer (coder) Haiku 5.5 medium; Leader Sonnet 5.5 medium; Oracle Sonnet 5.5 high (L3 == Sonnet 5.5, no Opus). Supersedes the 2026-10-13 Opus oracle note below. Leader owns contracts (function headers); doer implements; Sonnet medium corrects. | L1 == L2 (Sonnet 5.5). L3 is Opus 5.5 at high effort by operator decision (2026-10-13), bound only to the Oracle: planning mode and problems the Leader cannot resolve. Supersedes the 2026-10-08 'never raise to Opus' rule for this role; Leader and Fighters stay on Sonnet/Haiku. UNVERIFIED until the Oracle is dispatched live on claude-opus-5-5. | OPERATOR 2026-11-07: role.doer moved to tier L1 (fighters now sit on the mid model); on this binding the doer resolves to Sonnet 5.5 medium, superseding the 2026-10-17 Haiku/medium cell until the claude party is re-pinned."
 
 [binding.openai]
 L0       = "gpt-5.4-mini"
@@ -138,20 +138,20 @@ note     = "UNVERIFIED: ids supplied by operator. Probe 2026-10-08: the localhos
 # to a model: the harness takes the first AVAILABLE model in the tier's candidate list
 # (GET https://openrouter.ai/api/v1/models, no key). Candidate order is operator-editable.
 [binding.openrouter]
-L0       = "anthropic/claude-haiku-5.5"
-L1       = "anthropic/claude-sonnet-5.5"
-L2       = "anthropic/claude-sonnet-5.5"
-L3       = "openai/gpt-5.6-sol"
-resolved = "2026-10-08"
+L0       = "z-ai/glm-5.3-flash"
+L1       = "z-ai/glm-5.3-flash"
+L2       = "z-ai/glm-5.3-flash"
+L3       = "z-ai/glm-5.3-flash"
+resolved = "2026-11-08"
 effort_key = "reasoning.effort"             # nested field in the request body; see note
 effort_map = { low = "low", medium = "medium", high = "high" }
-dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L1", "high"], ["L3", "medium"], ["L3", "high"]]
-note     = "Availability and reasoning/tools/reasoning_effort support confirmed 2026-10-08 against the live model list for every candidate below. NOT confirmed: the request-body field name (a live call has not been made), and capability ranking within a tier (candidates are operator choices, not measured). OpenRouter lists openai/gpt-5.6-sol, gpt-5.6-terra and gpt-6-astra, not the operator's Codex names gpt-6.1-sol / gpt-6.5-tierra."
+dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L1", "high"], ["L3", "high"]]
+note     = "OPERATOR 2026-11-08 SOLO pin: one model, three roles - scout+fighter glm/low (two roles, distinct tool allowlists), leader glm/medium ceiling high, oracle glm/high. This is party-2-models.md's documented top shape: a widened Leader reaches the Oracle's rung; they differ in role and gear, not brain. glm max = 28 (AA v5.0.1) is the measured ceiling. deepseek-1017 (29 high / 33 max, 0.006/0.50 per M) demoted to heavy-slot fallback; glm-5.3 full (32, 0.07/1.40) is the upgrade path if escalation ever starves. qwen3.8-flash remains light fallback. Scout-on-DS economics rejected: DS wins only while digest output stays under 6.7% of input (worth ~0.1 cent/call); GLM's 6x-cheaper output wins the failure mode (bloated digest) and a weak scout is repaid in leader re-reads. UNVERIFIED: whether OpenRouter accepts effort max for glm-5.3-flash - if it does, adding max to effort_map puts the Oracle one rung above the Leader ceiling again; probe before pinning. glm med/low unmeasured; the 20-task gate settles the ladder. Supersedes the 2026-11-07 duo pin (oracle deepseek/medium)."
 
 [binding.openrouter.candidates]
-light = ["anthropic/claude-haiku-5.5", "openai/gpt-5.4-mini", "deepseek/deepseek-v4-flash"]
-mid   = ["anthropic/claude-sonnet-5.5", "openai/gpt-5.4", "deepseek/deepseek-v4-pro"]
-heavy = ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra"]   # no Anthropic heavy: never raise to Opus
+light = ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash-1017"]   # scout INTENTIONALLY shares the fighter's brain (party-2 s1..s3 squash); DS-low = volume fallback
+mid   = ["z-ai/glm-5.3-flash", "z-ai/glm-5.3"]
+heavy = ["z-ai/glm-5.3", "deepseek/deepseek-v4.1-flash-1017"]   # solo pin: upgrade path if the oracle ever starves at glm/high
 
 # Ollama: local models only. Largest usable is 9B, so there is no distinct heavy model:
 # heavy = the mid model at high effort (the same trick as the anthropic binding).
@@ -210,11 +210,21 @@ config     = "~/.codex/config.toml"     # profiles are the verified native path
 provider_refs = { openai = "copilot-proxy", ollama = "copilot-proxy" }
 
 [harness.opencode]
-providers  = ["openrouter", "ollama"]
+providers  = ["openrouter"]   # 2026-11-07: ollama dropped - opencode is OpenRouter-only; the solo party (one model, three roles) is the whole roster
 model_fmt  = "{provider}/{id}"
 agent_dir  = "~/.config/opencode/agents"
 config     = "~/.config/opencode/opencode.json"
-verified   = ["openrouter", "ollama"]   # `opencode debug agent` AND `opencode run` PONG, 2026-10-08
+# 2026-11-07: oh-my-opencode-slim UNINSTALLED (15 agents = context handoff sprawl; its
+# tui-state cache pinned council to openai/gpt-5.4-mini - proprietary, real money on
+# this route). opencode now routes the solo party NATIVELY, codex/claude parity:
+# binding.openrouter -> render_agents -> opencode.json (default_agent = orchestrator =
+# glm/medium; the agent map holds orchestrator only after the 2026-11-07 prune) +
+# agents/reader.md, doer.md, oracle.md (single-provider names; scout+fighter share
+# glm/low by design - reader.md keeps its read-only allowlist). sdd-harness.js plugin stays (independent prompt
+# injection). Orphaned but harmless: ~/.config/opencode/oh-my-opencode-slim.json{,c}
+# and storage/oh-my-opencode-slim/tui-state.json (skills master still syncs them;
+# not loaded while the plugin is out of the array).
+verified   = ["openrouter"]   # `opencode debug agent` AND `opencode run` PONG, 2026-10-08; 2026-11-07 PONG3 native, no plugin
 
 [harness.pi]
 providers  = ["ollama", "openrouter"]

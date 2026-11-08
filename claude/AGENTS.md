@@ -34,6 +34,7 @@ Systems thinking: Generalization first, instances second (see the One-Liner colu
 - Decide from the spec. When a decision required interpretation, append one
   line to interpretations.md (decision, basis, date) and keep moving.
   Provenance replaces permission.
+- When two readings of a spec conflict, take the reading that serves the design intent the spec names, not the one an incidental code value happens to hold. Log the choice and its basis in interpretations.md.
 - Rules about your own behavior/permissions are yours to set: apply the
   least-blocking interpretation, log it, continue. Never surface them as
   "needs your call."

@@ -45,6 +45,9 @@ gate does not fire on them, and they should be deleted, not preserved.
 | playbook.md | / | docs | none | Conceptual design for the current campaign (now: routing features through the agentic-kanban board). First stage: playbook, then specs, then plan.md, then the board. |
 | plan.md | / | docs | read-only | Generated view of the agentic-kanban board for the current campaign (open, doing, done). The board is the source of truth; its render_plan tool writes this file. Change it through the board (add_lesson, or import a fresh plan), or flip this row back when starting a new campaign. Name fixed by operator instruction. |
 | *.md | docs/playbooks/ | docs | named-for-intent | Task ledgers an operator works through, one per campaign, in the playbook format. |
+| INTAKE.md | docs/ | docs | none | Append-only log of every change request entering the SDD chain (policy/triage.md). |
+| rule-conflict-log.md | docs/ | docs | none | Log of spec contradictions with resolution state (policy/rule-conflict-protocol.md). |
+| waivers.md | docs/ | docs | none | Scoped, expiring per-decision waivers enforced by the project decision gate. |
 
 ## Spec surface — requirements, design, and the record store
 

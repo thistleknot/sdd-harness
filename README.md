@@ -331,7 +331,7 @@ a live probe passed; the rows in `manifest.toml` carry the evidence):
 | Harness | Templates | Live status |
 |---|---|---|
 | claude | anthropic | `reader` and `oracle` dispatched, `doer` run as a Fighter via `--agent`; this long-lived session's registry did not re-add `doer` until restart |
-| opencode | openrouter, ollama | `debug agent` + `run` PONG for both |
+| opencode | openrouter | 2026-11-08 solo pin: one model (glm-5.3-flash) three roles (low/medium/high), adapter-exported only, 4 lanes render IDENTICAL; omo-slim uninstalled, live config never hand-edited |
 | codex | openai, ollama | profiles load; the localhost:4000 proxy serves neither template's models |
 | pi | ollama (openrouter needs a provider entry) | starts clean; subagent dispatch not exercised |
 | kiro, gemini, hermes | instruction document only | unverified (gemini CLI is not installed) |

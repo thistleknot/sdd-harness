@@ -155,6 +155,54 @@ Before any file mutations, the agent MUST confirm:
 
 ---
 
+## Article XVI: Decision Governance
+
+Decisions are the system of record that specs and code derive from. A spec that
+contradicts an Accepted decision is a defect, not a refinement. (Source: DDSE —
+"the spec tells the story, but decisions run the enterprise.")
+
+**Typed decision records (TDRs).** Every durable choice is a typed record, in-repo,
+cross-linked to the work and code it governs:
+
+- `MDD` — Mission: what the system is for. Changes rarely; operator-level.
+- `ADR` — Architecture: structure, components, technology. Changes on a redesign.
+- `CDR` — Contract: an API/interface agreement. Carries a required **contract**
+  section (the source of truth for the interface) and requires a contract test
+  (Article V). Mock/type generation is a later increment, not a gate.
+- `EDR` — Entity/Data: schema, data model, persistence.
+- `IDR` — Implementation: local, changeable per task.
+
+**AI Context block.** Every TDR carries a machine-parsable block so agents follow
+the constraint, not just the prose:
+
+```
+AI-Context:
+  Constraints: <limits the implementer must not cross>
+  Patterns: <incumbent patterns to reuse>
+  Anti-patterns: <rejected approaches this decision forbids>
+  Verification commands: <commands proving conformance>
+```
+
+**Lifecycle.** `Proposed → Accepted → Deprecated → Superseded-by:<id>`. Code and
+specs may cite only `Accepted` decisions. A citation to a Deprecated/Superseded
+decision is a finding. Supersession names the replacing id; the old record is kept,
+never deleted (Decision Memory — the rationale lineage survives).
+
+**Traceability.** Code and specs cite the decision ids they realise. A decision with
+no citing artifact is a finding (an Accepted decision that governs nothing is
+either dead or unenforced). A code path that contradicts an Accepted decision is a
+spec violation, not a refactor.
+
+**Enforcement.** `spec_gate.py` and the decision check deny mutations that would
+cite a non-Accepted decision or contradict an Accepted one. The decision backlog
+prevents re-litigation: a question already answered by an Accepted decision is not
+reopened without superseding it.
+
+**Exception.** A one-line, task-local choice that no other artifact depends on needs
+no TDR — it is an `IDR` at most, and may be inline.
+
+---
+
 ## Amendment Process
 
 Modifications to this constitution require:

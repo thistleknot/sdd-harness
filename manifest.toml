@@ -250,7 +250,7 @@ harness  = "opencode"
 strategy = "GENERATE"
 target   = "C:/Users/user/.config/opencode/agents"
 emit     = "<role>-<provider>.md (model, mode, permission map) plus reasoning variants merged into opencode.json"
-note     = "Never touches oh-my-opencode-slim.json. Templates: openrouter, ollama. Effort is a model variant for openrouter (openai/* takes flat reasoningEffort, other vendors the nested reasoning object) and advisory for ollama. Verified 2026-10-08 with `opencode debug agent` AND `opencode run`: PONG from openrouter haiku-5.5 (low), sonnet-5.5 (low), gpt-5.6-sol (high) and from ollama qwopus 9b (6m40s cold)."
+note     = "Never touches oh-my-opencode-slim.json (plugin uninstalled 2026-11-07; the file is orphaned). Templates: openrouter only - ollama dropped 2026-11-07, single provider so lanes render to agents/<role>.md. Effort is a model variant for openrouter (openai/* takes flat reasoningEffort, other vendors the nested reasoning object). APPROACH 2026-11-08: SOLO pin - one model (z-ai/glm-5.3-flash), three roles: reader+doer low, leader (default_agent orchestrator) medium, oracle high. The adapter path (tiers.toml -> python adapter.py --target agents --apply) is the ONLY writer of opencode agent files and session defaults; live configs are never hand-edited. Verified 2026-11-08: lanes + opencode.json render IDENTICAL from binding.openrouter, exit 0."
 
 [[cell]]
 artifact = "agents"

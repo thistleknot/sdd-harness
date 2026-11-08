@@ -80,10 +80,12 @@ VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 # SessionEnd has no VS Code equivalent; SubagentStart/Stop have no Claude-settings hooks to run.
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
 OPENCODE_LOCAL_TIMEOUT_MS = 240000
+# OMO-slim was uninstalled 2026-11-08; it must never load from any opencode config.
+RETIRED_OPENCODE_PLUGINS = frozenset({"oh-my-opencode-slim"})
 HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
 BACKUP_RUN = Path.home() / '.harness/backups' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + uuid4().hex[:8])
-SKILL_COPY_TARGETS = {'codex': '.agents/skills', 'copilot': '.copilot/skills', 'opencode': '.config/opencode/skills',
-                      'hermes': '.hermes/skills', 'pi': '.pi/skills'}
+SKILL_COPY_TARGETS = {'claude': '.claude/skills', 'codex': '.agents/skills', 'copilot': '.copilot/skills',
+                      'opencode': '.config/opencode/skills', 'hermes': '.hermes/skills', 'pi': '.pi/skills'}
 SKILL_ROUTER_TARGETS = ('claude', 'codex', 'kiro', 'vscode')
 SKILL_EXCLUDES = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.benchmarks',
                   'node_modules', '.tmp', '.chroma', 'backups', '.ruff_cache'}
@@ -187,6 +189,8 @@ def ensure_global_hooks(path: Path, hooks: list[dict]) -> bool:
     events = data.setdefault("hooks", {})
     for hook in hooks:
         groups = events.setdefault(hook["event"], [])
+        if isinstance(groups, dict):
+            groups = events[hook["event"]] = [groups]
         matcher = hook.get("matcher")
         if any(g.get("matcher") == matcher and h.get("command") == hook["command"]
                for g in groups for h in g.get("hooks", [])):
@@ -289,6 +293,35 @@ def sync_claude_code(config: dict) -> None:
     sync_global_hooks(config, "claude")
 
 
+def remove_retired_opencode_plugins() -> None:
+    """Remove every retired plugin name from opencode's plugin lists.
+
+    Require: the target config files hold JSON(C) or are absent.
+    Guarantee: only the exact retired names are removed; other keys and plugins survive.
+    Maintain: no-op when the file is missing or already clean.
+    Assert: writes go through the safe harness writer.
+    """
+    import harness_write
+
+    home = Path.home()
+    for name in ("opencode.json", "tui.json"):
+        path = home / ".config" / "opencode" / name
+        existing = harness_write.read_existing(path)
+        if not existing:
+            continue
+        data = harness_write.load_jsonc(existing)
+        plugins = data.get("plugin")
+        if not isinstance(plugins, list):
+            continue
+        kept = [p for p in plugins if not (isinstance(p, str) and p.split("/")[-1] in RETIRED_OPENCODE_PLUGINS)]
+        if len(kept) == len(plugins):
+            continue
+        data["plugin"] = kept
+        artifact = harness_write.Artifact(path=path, text=json.dumps(data, indent=2, ensure_ascii=False) + "\n", mode="file")
+        changed = harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN)
+        print(f"  opencode: {'updated' if changed else 'unchanged'} {path} (retired plugins removed)")
+
+
 def sync_opencode(config: dict) -> None:
     """Project the central registry into OpenCode's native MCP schema.
 
@@ -298,6 +331,7 @@ def sync_opencode(config: dict) -> None:
     Maintain: existing unmanaged root keys and MCP names survive the safe writer merge.
     Assert: the generated object is valid JSONC and preserves each server's transport.
     """
+    remove_retired_opencode_plugins()
     oc_json = Path(mcp_projection_contract("opencode")["target"])
     if not oc_json.exists():
         print("  opencode: config not found, skipping")
@@ -852,9 +886,10 @@ def main():
     elif args.target == "agents":
         sync_agents(config, apply=args.apply)
     elif args.target == 'skills':
-        if not args.skill:
-            parser.error('--target skills requires --skill NAME...')
-        raise SystemExit(sync_skills(config, args.skill, apply=args.apply, check=args.check, reconcile=args.reconcile, clients=args.client))
+        names = args.skill or config.get('skill_packages', {}).get('packages')
+        if not names:
+            parser.error('--target skills requires --skill NAME... or harness.json skill_packages')
+        raise SystemExit(sync_skills(config, names, apply=args.apply, check=args.check, reconcile=args.reconcile, clients=args.client))
     else:
         targets[args.target](config)
 

@@ -93,7 +93,9 @@ def validate_skill(skill_file: Path) -> list[str]:
             continue
         prose_lines.append(line)
 
-    for match in MARKDOWN_LINK.finditer("\n".join(prose_lines)):
+    # Inline code spans quote example markdown; a link inside them is text, not a reference.
+    prose = re.sub(r"`[^`\n]*`", "", "\n".join(prose_lines))
+    for match in MARKDOWN_LINK.finditer(prose):
         target = match.group(1).strip().strip("<>")
         parsed = urlsplit(target)
         if parsed.scheme or target.startswith("//") or not parsed.path:

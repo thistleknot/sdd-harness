@@ -16,6 +16,17 @@ function Check($name, $test) {
     }
 }
 
+function CheckSpec($name, $test) {
+    try {
+        $result = & $test
+        if ($result) { Write-Host "  PASS  $name" -ForegroundColor Green; $script:pass++ }
+        else { Write-Host "  WARN  $name" -ForegroundColor Yellow; $script:fail++ }
+    } catch {
+        Write-Host "  WARN  $name ($($_.Exception.Message))" -ForegroundColor Yellow
+        $script:fail++
+    }
+}
+
 Write-Host "=== Cross-Harness SDD Health Check ===" -ForegroundColor Cyan
 Write-Host ""
 
@@ -63,6 +74,13 @@ Write-Host "--- Harness Spec ---"
 Check "requirements.md" { Test-Path "$HOME\.harness\requirements.md" }
 Check "design.md" { Test-Path "$HOME\.harness\design.md" }
 Check "inspirations.md" { Test-Path "$HOME\.harness\inspirations.md" }
+
+# 9. SpecsDB
+Write-Host "--- SpecsDB ---"
+CheckSpec "specs.db exists" { Test-Path "$HOME\.harness\specs\specs.db" }
+$convOut = & "$HOME\py310\Scripts\python.exe" "$HOME\.harness\scripts\check_decision_convention.py" 2>&1
+$convOut | ForEach-Object { Write-Host $_ }
+CheckSpec "decision convention check ran" { $LASTEXITCODE -eq 0 }
 
 Write-Host ""
 Write-Host "=== Results: $pass passed, $fail failed, $skip skipped ===" -ForegroundColor $(if ($fail -eq 0) { "Green" } else { "Yellow" })

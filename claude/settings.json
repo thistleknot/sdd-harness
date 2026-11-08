@@ -41,42 +41,53 @@
         }
       ]
     },
-    "UserPromptSubmit": {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/membank.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/log_event.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/spec_state.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/skills/retrieve-skills/hook.py",
-          "timeout": 20
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.harness/hooks/codebase_map.py",
-          "timeout": 20
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/playbook.py",
-          "timeout": 20
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
-          "timeout": 20
-        }
-      ]
-    },
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/membank.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/spec_state.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/skills/retrieve-skills/hook.py",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.harness/hooks/codebase_map.py",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.harness/hooks/plan_do_route.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [

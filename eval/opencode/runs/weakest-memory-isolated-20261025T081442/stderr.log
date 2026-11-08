@@ -1,0 +1,22 @@
+timestamp=2026-10-25T15:14:47.753Z level=INFO run=edc83a4c message="creating instance" directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe"
+timestamp=2026-10-25T15:14:47.757Z level=INFO run=edc83a4c message=fromDirectory directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe"
+timestamp=2026-10-25T15:14:49.629Z level=INFO run=edc83a4c message=bootstrapping directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe"
+timestamp=2026-10-25T15:14:49.660Z level=INFO run=edc83a4c message=loading path="C:\\Users\\user\\.config\\opencode\\config.json"
+timestamp=2026-10-25T15:14:49.717Z level=INFO run=edc83a4c message=loading path="C:\\Users\\user\\.config\\opencode\\opencode.json"
+timestamp=2026-10-25T15:14:49.773Z level=INFO run=edc83a4c message=loading path="C:\\Users\\user\\.config\\opencode\\opencode.jsonc"
+timestamp=2026-10-25T15:14:50.465Z level=INFO run=edc83a4c message=loading path="C:\\Users\\user\\.opencode\\opencode.json"
+timestamp=2026-10-25T15:14:50.481Z level=INFO run=edc83a4c message=loading path="C:\\Users\\user\\.opencode\\opencode.jsonc"
+timestamp=2026-10-25T15:14:51.035Z level=INFO run=edc83a4c message="enabled LSP servers" serverIds="zls, yaml-ls, vue, typescript, tinymist, texlab, terraform, svelte, sourcekit-lsp, rust, ruby-lsp, razor, pyright, prisma, php intelephense, oxlint, ocaml-lsp, nixd, lua-ls, kotlin-ls, julials, jdtls, haskell-language-server, gopls, gleam, fsharp, elixir-ls, eslint, dockerfile, deno, dart, clojure-lsp, clangd, csharp, biome, bash, astro"
+timestamp=2026-10-25T15:14:51.038Z level=INFO run=edc83a4c message="all formatters are disabled"
+timestamp=2026-10-25T15:14:51.038Z level=INFO run=edc83a4c message=init
+timestamp=2026-10-25T15:14:51.559Z level=INFO run=edc83a4c message=created id=ses_e8c5f07d8ffeCqrxqoUG1QypYF slug=proud-pixel version=1.19.3 projectID=global directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe" path=Users/user/AppData/Local/Temp/opencode-start-probe workspaceID=undefined parentID=undefined title="OpenCode probe" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792941291559 time.updated=1792941291559
+timestamp=2026-10-25T15:14:51.778Z level=INFO run=edc83a4c message="event connected"
+timestamp=2026-10-25T15:14:51.914Z level=INFO run=edc83a4c message=loop session.id=ses_e8c5f07d8ffeCqrxqoUG1QypYF step=0
+timestamp=2026-10-25T15:14:54.296Z level=INFO run=edc83a4c message="shell tool using shell" shell="C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.EXE"
+timestamp=2026-10-25T15:14:57.186Z level=INFO run=edc83a4c message="watcher backend" directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe" platform=win32 backend=windows
+timestamp=2026-10-25T15:14:57.213Z level=INFO run=edc83a4c message="project copy refresh started" projectID=global
+timestamp=2026-10-25T15:14:57.219Z level=INFO run=edc83a4c message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-10-25T15:14:58.682Z level=INFO run=edc83a4c message="booting location services" directory="C:\\Users\\user\\AppData\\Local\\Temp\\opencode-start-probe" workspaceID=undefined
+timestamp=2026-10-25T15:14:59.013Z level=INFO run=edc83a4c message=process session.id=ses_e8c5f07d8ffeCqrxqoUG1QypYF messageID=msg_173a100c3001uKXCUHoIfbvKP1
+timestamp=2026-10-25T15:14:59.025Z level=INFO run=edc83a4c message=stream providerID=litellm modelID=qwen3.5-oc:2b session.id=ses_e8c5f07d8ffeCqrxqoUG1QypYF small=false agent=orchestrator mode=all
+timestamp=2026-10-25T15:14:59.571Z level=INFO run=edc83a4c message="llm runtime selected" llm.runtime=ai-sdk llm.provider=litellm llm.model=qwen3.5-oc:2b

@@ -109,3 +109,7 @@ consecutive syncs; a hand-edited target is reported rather than clobbered; a
 scoped rule reaches only its declared harnesses; every one of the 635 source
 units is accounted for; and `--check` runs in the hook/CI path so the seven
 surfaces cannot drift back apart into the state Canon #8 measured.
+
+## Changes classification rule
+
+Changes are classified through policy/triage.md before any spec or code work; the classification line is appended to the repo's INTAKE.md.

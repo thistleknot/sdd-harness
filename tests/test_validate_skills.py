@@ -127,6 +127,39 @@ def test_cli_uses_failure_exit_status_for_invalid_skill_store(skill_store: Path,
     assert "4 skill(s) scanned" in capsys.readouterr().out
 
 
+def test_link_inside_inline_code_span_is_not_a_reference(tmp_path: Path) -> None:
+    """Ignore markdown links quoted as inline code, while still flagging a real broken link.
+
+    Args:
+        tmp_path: Pytest-owned temporary directory.
+
+    Require: One package quotes a missing link in a code span; another has a real missing link in prose.
+    Guarantee: Only the prose link produces a finding.
+    Maintain: The quoted example is text, so validation never resolves it.
+    Assert: Exactly one finding names the prose target and none names the quoted target.
+    """
+    quoted = tmp_path / "quoted" / "SKILL.md"
+    quoted.parent.mkdir()
+    quoted.write_text(
+        "---\nname: quoted\ndescription: Use for quoted fixture.\n---\n"
+        "Example: `**Process:** [BP-001](../processes/BP-001.bpmn)` only.\n",
+        encoding="utf-8",
+    )
+    prose = tmp_path / "prose" / "SKILL.md"
+    prose.parent.mkdir()
+    prose.write_text(
+        "---\nname: prose\ndescription: Use for prose fixture.\n---\n[Real](references/missing.md)\n",
+        encoding="utf-8",
+    )
+
+    scanned, findings = validate_root(tmp_path)
+
+    assert scanned == 2
+    assert len(findings) == 1
+    assert "references/missing.md" in findings[0]
+    assert not any("BP-001" in item for item in findings)
+
+
 def test_cli_returns_success_when_all_skill_packages_are_valid(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """Verify the CLI success status for a valid skill store.
 

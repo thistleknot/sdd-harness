@@ -1,22 +1,29 @@
-"""| Stage | Mechanism | Contract |
-| INTEGRATE | Register the complete tool catalog before stateless startup | [mandatory] R17 |
+"""FastMCP server exposing global and workspace-scoped specification tools.
 
-Spec: docs/playbooks/memory-and-harness-integration.md R17.
-CLOSED: parallel registries or writers for the same feature.
-Preconditions and failure modes: see the governing spec and incumbent contract below.
+| Stage | Mechanism | Tag | Requirement |
+|---|---|---|---|
+| REGISTER | Register global and project-scoped tools before service startup | [mandatory] | R1 |
+| STORE | Keep global CRUD on its configured DB; fix project DB at `<root>/.specs/reqs/requirements.db` | [mandatory] | R2 |
+| INDEX | Register project artifact IDs and paths only after file containment checks | [mandatory] | R3 |
+| RENDER | Auto-render global views after global mutations; project writes remain DB-only | [contract] | R4 |
+| SERVE | Start streamable HTTP after tool registration | [mandatory] | R1 |
 
-specs_mcp.py — FastMCP server exposing the specs tracker as MCP tools.
+R1: WHEN the service starts, THEN every decorated tool MUST be registered before `mcp.run`.
+R2: WHEN a project tool is called, its absolute existing workspace root MUST determine the database path; no arbitrary path or global DB is accepted.
+R3: WHEN an artifact is indexed, its existing file MUST resolve inside that workspace's `.specs` tree.
+R4: WHEN a project requirement is added, THEN no Markdown view is written into the workspace or global tracker.
+R5: WHEN a project tool is advertised, THEN every input parameter MUST describe its meaning and accepted values.
+R6: WHEN a project tool has a global counterpart, its description MUST state when to use each tool.
 
-Runs as a persistent HTTP service. CRUD tools write to specs.db,
-then auto-render all markdown views after each mutation.
-
-Usage:
-    python specs_mcp.py [--port 8057]
-
-Register in mcp.json:
-    "specs": { "url": "http://127.0.0.1:8057/mcp", "disabled": false }
+CLOSED: Project CRUD through global tools; evidence: their database is module-pinned and has no workspace parameter.
+Preconditions: SpecsDB and FastMCP dependencies are installed; project root exists.
+Failure modes: invalid roots and database/filesystem failures propagate; no project write falls back to the global DB.
 """
 from __future__ import annotations
+
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 import os
 from pathlib import Path
@@ -47,6 +54,121 @@ def _auto_render() -> dict:
 
 
 # ── Requirements ────────────────────────────────────────────────────────────
+
+def _project_db(workspace_root: str) -> tuple[SpecsDB, Path]:
+    """Open the registry fixed beneath one explicit project root.
+
+    Require: workspace_root is an existing absolute directory supplied by the caller.
+    Guarantee: the returned database is <root>/.specs/reqs/requirements.db.
+    Failure modes: ValueError for invalid roots; filesystem and SQLite errors propagate.
+    """
+    root = Path(workspace_root)
+    if not root.is_absolute() or not root.is_dir():
+        raise ValueError("workspace_root must be an existing absolute directory")
+    specs_root = (root / ".specs").resolve()
+    reqs_root = specs_root / "reqs"
+    reqs_root.mkdir(parents=True, exist_ok=True)
+    db_path = (reqs_root / "requirements.db").resolve()
+    if not db_path.is_relative_to(specs_root):
+        raise ValueError("project registry path escapes .specs")
+    return SpecsDB(db_path), db_path
+
+
+@mcp.tool
+def project_add_requirement(
+    workspace_root: Annotated[str, Field(description="Absolute path to an existing project directory.")],
+    title: Annotated[str, Field(description="Short, unique name for the requirement.")],
+    criteria: Annotated[str, Field(description="Observable acceptance criteria for the requirement.")],
+    priority: Annotated[Literal["must", "should", "could", "normal"], Field(description="Requirement priority.")] = "normal",
+) -> str:
+    """Add a requirement to the selected project's `.specs` SQLite registry. Use this for workspace-specific requirements; use global `add_requirement` only for the harness-wide registry.
+
+    Args:
+        workspace_root: Absolute path to an existing project directory.
+        title: Short, unique name for the requirement.
+        criteria: Observable acceptance criteria for the requirement.
+        priority: Requirement priority: `must`, `should`, `could`, or `normal`.
+
+    Returns:
+        The assigned requirement ID and project registry path.
+
+    Raises:
+        ValueError: The project path is not absolute or does not exist.
+        OSError: The project registry cannot be created or written.
+    """
+    project_db, db_path = _project_db(workspace_root)
+    try:
+        rid = project_db.add_requirement(title, criteria, priority)
+        return f"Requirement #{rid} added to {db_path}: {title}"
+    finally:
+        project_db.close()
+
+
+@mcp.tool
+def project_query_requirements(
+    workspace_root: Annotated[str, Field(description="Absolute path to an existing project directory.")],
+    query: Annotated[str, Field(description="Optional text matched against requirement titles and criteria.")] = "",
+) -> str:
+    """Search requirements in one project's `.specs` SQLite registry. Use this when searching a project; global `query_specs` searches the harness registry.
+
+    Args:
+        workspace_root: Absolute path to an existing project directory.
+        query: Optional text to match against requirement titles and criteria.
+
+    Returns:
+        Matching requirements with their IDs, statuses, titles, and criteria.
+
+    Raises:
+        ValueError: The project path is not absolute or does not exist.
+        OSError: The project registry cannot be opened.
+    """
+    project_db, db_path = _project_db(workspace_root)
+    try:
+        rows = project_db.query_specs(type="requirements", query=query or None)
+        if not rows:
+            return f"No project requirements found in {db_path}"
+        return "\n".join(f"#{row['id']} [{row['status']}] {row['title']}: {row['criteria']}" for row in rows)
+    finally:
+        project_db.close()
+
+
+@mcp.tool
+def project_register_artifact(
+    workspace_root: Annotated[str, Field(description="Absolute path to an existing project directory.")],
+    artifact_id: Annotated[str, Field(description="Stable ID used to reference this artifact in the registry.")],
+    artifact_type: Annotated[str, Field(description="Artifact category, such as requirements or entity_model.")],
+    relative_path: Annotated[str, Field(description="Project-relative path to an existing file under .specs.")],
+) -> str:
+    """Index an existing artifact contained in the project's `.specs` tree.
+
+    Args:
+        workspace_root: Absolute path to an existing project directory.
+        artifact_id: Stable ID used to reference this artifact in the registry.
+        artifact_type: Artifact category, such as `requirements` or `entity_model`.
+        relative_path: Project-relative path to an existing file under `.specs`.
+
+    Returns:
+        Confirmation with the artifact ID and registered project-relative path.
+
+    Raises:
+        ValueError: The root is invalid or the artifact is missing or outside `.specs`.
+        OSError: The project registry cannot be opened or written.
+    """
+    root = Path(workspace_root)
+    if not root.is_absolute() or not root.is_dir():
+        raise ValueError("workspace_root must be an existing absolute directory")
+    specs_root = (root / ".specs").resolve()
+    artifact = (root / relative_path).resolve()
+    if not artifact.is_relative_to(specs_root) or not artifact.is_file():
+        raise ValueError("artifact must be an existing file inside workspace .specs")
+    project_db, db_path = _project_db(workspace_root)
+    try:
+        project_db.conn.execute("CREATE TABLE IF NOT EXISTS artifacts (artifact_id TEXT PRIMARY KEY, artifact_type TEXT NOT NULL, relative_path TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        project_db.conn.execute("INSERT INTO artifacts VALUES (?, ?, ?, datetime('now')) ON CONFLICT(artifact_id) DO UPDATE SET artifact_type=excluded.artifact_type, relative_path=excluded.relative_path, updated_at=excluded.updated_at", (artifact_id, artifact_type, str(artifact.relative_to(root))))
+        project_db.conn.commit()
+        return f"Artifact {artifact_id} indexed in {db_path}: {artifact.relative_to(root)}"
+    finally:
+        project_db.close()
 
 @mcp.tool
 def add_requirement(title: str, criteria: str, priority: str = "normal") -> str:

@@ -1,0 +1,16 @@
+digraph specification_flow {
+  rankdir=TB;
+  graph [label="Project Specification Flow", labelloc=t];
+  node [shape=record];
+
+  intake [label="{Intake|Intent and source evidence}"];
+  requirements [label="{Requirements|.specs/reqs/requirements.db}"];
+  business [label="{Business use cases|Stakeholder outcomes}"];
+  entities [label="{Entity model|Classes and relationships}"];
+  system [label="{System use cases|Interactions and alternatives}"];
+  diagrams [label="{Functional diagrams|Derived from system flows}"];
+  validation [label="{Validation|Index artifacts and verify gates}"];
+
+  intake -> requirements -> business -> entities -> system -> diagrams -> validation;
+  validation -> requirements [label="requirement clarification", constraint=false];
+}

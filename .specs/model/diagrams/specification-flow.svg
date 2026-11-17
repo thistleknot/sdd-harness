@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800" role="img" aria-labelledby="title desc">
+  <title id="title">Project Specification Flow</title>
+  <desc id="desc">Requirements lead to business use cases, entity model, system use cases, functional diagrams, and validation. A requirement clarification returns to the requirements stage.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#334155" />
+    </marker>
+    <marker id="feedback-arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#b45309" />
+    </marker>
+  </defs>
+  <rect width="1000" height="800" fill="#f8fafc" />
+  <text x="500" y="34" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="23" font-weight="700" fill="#0f172a">Project Specification Flow</text>
+  <g fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M500 112 V143" />
+    <path d="M500 207 V238" />
+    <path d="M500 302 V333" />
+    <path d="M500 397 V428" />
+    <path d="M500 492 V523" />
+    <path d="M500 587 V618" />
+  </g>
+  <path d="M360 650 H135 V175 H360" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="8 5" marker-end="url(#feedback-arrow)" />
+  <text x="118" y="420" text-anchor="middle" transform="rotate(-90 118 420)" font-family="Segoe UI, sans-serif" font-size="14" fill="#92400e">Requirement clarification reopens dependent stages</text>
+  <g font-family="Segoe UI, sans-serif" text-anchor="middle">
+    <g><rect x="360" y="48" width="280" height="64" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/><text x="500" y="74" font-size="17" font-weight="700" fill="#172554">Intake and evidence</text><text x="500" y="96" font-size="13" fill="#1e3a8a">Intent, existing specs, source material</text></g>
+    <g><rect x="360" y="143" width="280" height="64" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="500" y="169" font-size="17" font-weight="700" fill="#14532d">Requirements</text><text x="500" y="191" font-size="13" fill="#166534">.specs/reqs/requirements.db</text></g>
+    <g><rect x="360" y="238" width="280" height="64" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="500" y="264" font-size="17" font-weight="700" fill="#78350f">Business use cases</text><text x="500" y="286" font-size="13" fill="#92400e">Stakeholder goals and outcomes</text></g>
+    <g><rect x="360" y="333" width="280" height="64" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/><text x="500" y="359" font-size="17" font-weight="700" fill="#4c1d95">Entity model</text><text x="500" y="381" font-size="13" fill="#5b21b6">Entities, attributes, relationships</text></g>
+    <g><rect x="360" y="428" width="280" height="64" rx="8" fill="#ffe4e6" stroke="#e11d48" stroke-width="2"/><text x="500" y="454" font-size="17" font-weight="700" fill="#881337">System use cases</text><text x="500" y="476" font-size="13" fill="#9f1239">Interactions, alternatives, failures</text></g>
+    <g><rect x="360" y="523" width="280" height="64" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/><text x="500" y="549" font-size="17" font-weight="700" fill="#0c4a6e">Functional diagrams</text><text x="500" y="571" font-size="13" fill="#075985">Derived from system-use-case flows</text></g>
+    <g><rect x="360" y="618" width="280" height="64" rx="8" fill="#e2e8f0" stroke="#475569" stroke-width="2"/><text x="500" y="644" font-size="17" font-weight="700" fill="#1e293b">Validation and registry</text><text x="500" y="666" font-size="13" fill="#334155">Verify gates and index artifact paths</text></g>
+  </g>
+  <text x="500" y="744" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#475569">Each stage starts after its dependencies pass validation.</text>
+</svg>

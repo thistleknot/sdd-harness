@@ -7,3 +7,4 @@ from .security_validator import SecurityValidator
 from .self_review_validator import SelfReviewValidator
 from .convergence_validator import ConvergenceValidator
 from .sprawl_validator import SprawlValidator
+from .sdd_workflow_validator import SddWorkflowValidator

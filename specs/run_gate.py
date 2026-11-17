@@ -44,6 +44,7 @@ from .validators import (
     SecurityValidator,
     SelfReviewValidator,
     SprawlValidator,
+    SddWorkflowValidator,
 )
 
 
@@ -102,6 +103,17 @@ def build_registry() -> list[tuple[ValidatorRegistration, object]]:
                 timeout_seconds=30,
             ),
             SprawlValidator(),
+        ),
+        (
+            ValidatorRegistration(
+                validator_id="sdd-deliverables",
+                name="SDD Deliverables Handoff",
+                triggers=[LifecycleEventType.post_task_exec],
+                rule_ids=["req:85", "req:86", "req:87"],
+                fail_open=False,
+                timeout_seconds=10,
+            ),
+            SddWorkflowValidator(),
         ),
     ]
 

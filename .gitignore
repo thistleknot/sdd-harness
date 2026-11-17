@@ -53,3 +53,12 @@ agentic spec driven development.png
 
 # Timestamped copies of live configs replaced by render_agents.py --apply (may hold credentials)
 backups/
+
+# Runtime files for the port-8058 specs server (2026-11-17)
+specs-project-8058.log
+specs-project-8058.pid
+specs/specs-project-8058.log
+specs/specs-project-8058.pid
+
+# Nested eval worktrees, never committed to the parent repo
+eval/worktrees/

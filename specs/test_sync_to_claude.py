@@ -228,6 +228,21 @@ def test_second_push_is_a_noop(tree):
     assert "changed: 0" in run_sync(tree, "-Push").stdout
 
 
+def test_registry_generated_agents_is_never_pulled_or_pushed_by_legacy_sync(tmp_path: Path):
+    """Keep AGENTS.md under registry publication once the project DB exists."""
+    harness = tmp_path / "harness"
+    live = tmp_path / "live"
+    write(harness / "instructions" / "rules.db", "registry")
+    write(harness / "claude" / "AGENTS.md", "generated from database\n")
+    write(live / "AGENTS.md", "client copy\n")
+    push = run_sync(tmp_path, "-Push")
+    assert "generated from instructions/rules.db" in push.stdout
+    assert (live / "AGENTS.md").read_text(encoding="utf-8") == "client copy\n"
+    pull = run_sync(tmp_path, "-Pull")
+    assert "generated from instructions/rules.db" in pull.stdout
+    assert (harness / "claude" / "AGENTS.md").read_text(encoding="utf-8") == "generated from database\n"
+
+
 # --- never delete ------------------------------------------------------------
 
 def test_push_never_deletes_live_only_file(tree):

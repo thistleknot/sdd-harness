@@ -11,6 +11,7 @@ Pipeline:
 | Stage | Mechanism | Tag | Requirements |
 |---|---|---|---|
 | LOAD | Read harness.json as the canonical server registry | [mandatory] | R1 |
+| LOAD_RULES | Render VS Code instruction text from the ordered rule registry when present | [mandatory] | Requirement #4 |
 | PROJECT | Render each registered server in the native client schema, including Hermes via its native writer | [mandatory] | R1, R2, R7 |
 | CLEAN | Remove only the exact retired C: Graphify hook commands before projecting current hooks | [mandatory] | R8 |
 | WRITE | Merge through harness_write so backups and atomic writes apply | [mandatory] | R3 |
@@ -33,6 +34,7 @@ R11: When Hermes projection repeats without semantic changes, the system shall p
 R12: When Hermes projection runs, the system shall preserve unowned root settings, server controls, and environment keys.
 R13: When a local server is projected to Hermes, the system shall allow the existing 240-second startup budget.
 R14: If Hermes validation, snapshot verification, or readback fails, then the system shall report failure without claiming completion.
+R15: WHEN the prompt rule registry exists, VS Code instruction generation MUST use its rendered shared document rather than reread the Markdown export as authority.
 CLOSED: A separate OpenAI-only registry is rejected because ~/.harness is the shared
 cross-harness source. Interactive `hermes mcp add` is rejected because it performs server
 discovery and prompts; Hermes' `_save_mcp_server` is the native non-interactive writer. Scalar-only
@@ -67,6 +69,7 @@ from uuid import uuid4
 import yaml
 
 import harness_write
+from instructions.rules import RuleStore
 from scripts.validate_skills import validate_skill
 
 try:
@@ -76,6 +79,7 @@ except ModuleNotFoundError:
 
 HARNESS_CONFIG = Path(__file__).parent / "harness.json"
 HARNESS_AGENTS = Path(__file__).parent / "claude" / "AGENTS.md"
+HARNESS_RULES_DB = Path(__file__).parent / "instructions" / "rules.db"
 VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 # SessionEnd has no VS Code equivalent; SubagentStart/Stop have no Claude-settings hooks to run.
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
@@ -151,10 +155,22 @@ def mcp_projection_contract(name: str) -> dict:
     return {"strategy": "GENERATE", "target": str(path), "key": key, "reason": ""}
 
 
-def write_server_projection(path: Path, key: str, servers: dict, *, jsonc: bool = False) -> bool:
+def projected_servers(config: dict, harness: str) -> dict:
+    """Return the registered MCP servers this harness should receive.
+
+    Require: config["mcp_servers"] maps names to server dicts; `exclude_harnesses` is optional.
+    Guarantee: a server listing `harness` in `exclude_harnesses` is absent from the result.
+    """
+    return {name: srv for name, srv in config["mcp_servers"].items()
+            if harness not in srv.get("exclude_harnesses", [])}
+
+
+def write_server_projection(path: Path, key: str, servers: dict, *, jsonc: bool = False,
+                            retired: tuple = ()) -> bool:
     """Merge registered servers into a native config and write through the harness backup path.
 
-    Require: `servers` contains only this adapter's registered MCP names.
+    Require: `servers` contains only this adapter's registered MCP names; `retired` names
+        servers this adapter used to project and must now remove from the target.
     Guarantee: unrelated root keys and unregistered servers survive; changed files are backed up.
     Maintain: target-owned server entries are replaced as complete values on every run.
     Assert: the result remains valid JSON before handing it to the safe atomic writer.
@@ -166,7 +182,7 @@ def write_server_projection(path: Path, key: str, servers: dict, *, jsonc: bool 
     current = data.get(key, {})
     if not isinstance(current, dict):
         raise harness_write.WriteError(f"{path}: expected an object at {key!r}")
-    data[key] = {**current, **servers}
+    data[key] = {k: v for k, v in {**current, **servers}.items() if k not in retired}
     rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     artifact = harness_write.Artifact(path=path, text=rendered, mode="file")
     changes = harness_write.plan([artifact])
@@ -279,7 +295,7 @@ def sync_claude_code(config: dict) -> None:
     """Update ~/.claude.json with MCP servers from harness config."""
     claude_json = Path(mcp_projection_contract("claude")["target"])
     servers = {}
-    for name, srv in config["mcp_servers"].items():
+    for name, srv in projected_servers(config, "claude").items():
         if srv["type"] == "http":
             servers[name] = {"type": "http", "url": srv["url"]}
         else:
@@ -288,7 +304,8 @@ def sync_claude_code(config: dict) -> None:
                 entry["env"] = srv["env"]
             servers[name] = entry
 
-    changed = write_server_projection(claude_json, "mcpServers", servers)
+    excluded = tuple(name for name in config["mcp_servers"] if name not in servers)
+    changed = write_server_projection(claude_json, "mcpServers", servers, retired=excluded)
     print(f"  Claude Code: {'updated' if changed else 'unchanged'} {claude_json} ({len(servers)} servers)")
     sync_global_hooks(config, "claude")
 
@@ -431,7 +448,7 @@ MCP_TOML_END = "# <<< harness mcp servers <<<"
 def codex_mcp_block(config: dict) -> str:
     """Render every server in config["mcp_servers"] as a Codex [mcp_servers.<name>] TOML table."""
     lines = []
-    for name, srv in config["mcp_servers"].items():
+    for name, srv in projected_servers(config, "codex").items():
         lines.append(f"[mcp_servers.{name}]")
         if srv["type"] == "http":
             lines.append(f"url = {json.dumps(srv['url'])}")
@@ -473,7 +490,7 @@ def sync_codex(config: dict) -> None:
         a = outside.index(MCP_TOML_BEGIN)
         b = outside.index(MCP_TOML_END, a) + len(MCP_TOML_END)
         outside = outside[:a] + outside[b:]
-    for name in config["mcp_servers"]:
+    for name in projected_servers(config, "codex"):
         if re.search(rf"^\s*\[mcp_servers\.{re.escape(name)}(\.[^\]]*)?\]", outside, re.M):
             raise RuntimeError(
                 f"{path} already defines [mcp_servers.{name}] outside the generated block; "
@@ -482,7 +499,7 @@ def sync_codex(config: dict) -> None:
 
     written = harness_write.apply(changes, BACKUP_RUN)
     state = "updated" if written else "unchanged"
-    print(f"  Codex: {state} {path} ({len(config['mcp_servers'])} servers)")
+    print(f"  Codex: {state} {path} ({len(projected_servers(config, 'codex'))} servers)")
 
 
 CODEX_FEATURE_COMMAND = ("c:/users/user/py310/Scripts/python.exe "
@@ -589,12 +606,26 @@ def sync_vscode(config: dict) -> None:
         "<!-- Generated by ~/.harness/adapter.py from claude/AGENTS.md. Do not edit. -->\n"
         "<!-- Hooks run here through ~/.copilot/hooks/harness.json -> hooks/vscode_shim.py. -->\n"
         "<!-- Not ported: verify_gate and session_handoff (need Claude's transcript), SessionEnd. -->\n\n"
-        + HARNESS_AGENTS.read_text(encoding="utf-8")
+        + _harness_agents_text()
         + vscode_pointer_section()
     )
     harness_write.apply(harness_write.plan([harness_write.Artifact(core, core_text)]), BACKUP_RUN)
     print(f"  VS Code: updated {core}")
     sync_vscode_hooks()
+
+
+def _harness_agents_text() -> str:
+    """Read the current shared instruction projection from its authority.
+
+    Require: persistent registry exists or legacy Markdown source exists.
+    Guarantee: when registry exists, returned text is its exact rendered shared document.
+    Maintain: Markdown remains a generated projection after registry initialization.
+    Assert: registry output decodes as UTF-8.
+    Failure modes: missing shared document or malformed UTF-8 raises.
+    """
+    if HARNESS_RULES_DB.is_file():
+        return RuleStore(HARNESS_RULES_DB).render("shared").decode("utf-8")
+    return HARNESS_AGENTS.read_text(encoding="utf-8")
 
 
 def sync_vscode_hooks() -> None:

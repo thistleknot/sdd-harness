@@ -2,7 +2,7 @@
 |---|---|---|---|
 | FIXTURE | Build temporary harness homes and representative MCP configs | [mandatory] | R1 |
 | PROJECT | Invoke each harness adapter against its temporary destinations | [mandatory] | R1 |
-| VERIFY | Check native formats, Hermes writer payload, retired-hook cleanup, and preserved files | [mandatory] | R2, R3, R5 |
+| VERIFY | Check native formats, registry-backed prompt text, Hermes writer payload, and preserved files | [mandatory] | R2, R3, R5, R6 |
 
 R1: When a sync test runs, its fixtures MUST isolate writes from live config.
 R2: When VS Code instructions are generated, they MUST contain the complete
@@ -11,6 +11,7 @@ R3: When VS Code sync repeats, its generated instructions MUST remain identical.
 R4: When a local MCP is projected to OpenCode, the test MUST assert the configured
 tool-fetch timeout covers the measured cold start.
 R5: When a retired Graphify hook is removed, every unrelated hook and setting MUST survive.
+R6: When the instruction registry exists, VS Code prompt content MUST equal its rendered shared document.
 
 CLOSED: Pinning the literal '# Operating Core' title was rejected because the
 operator's updated canonical prompt uses '# Operating Contract'.
@@ -29,6 +30,8 @@ import pytest
 
 from adapter import (
     HARNESS_AGENTS,
+    HARNESS_RULES_DB,
+    _harness_agents_text,
     ensure_global_hooks,
     load_harness,
     remove_retired_graphify_hooks,
@@ -40,6 +43,7 @@ from adapter import (
     sync_opencode,
     sync_vscode,
 )
+from instructions.rules import RuleStore
 
 
 @pytest.fixture(autouse=True)
@@ -328,6 +332,23 @@ def test_sync_vscode_writes_core_instructions_and_spares_others(config, tmp_path
     assert mine.read_bytes() == before
     sync_vscode(config)
     assert (prompts / "harness-core.instructions.md").read_text(encoding="utf-8") == first
+
+
+def test_harness_instruction_text_uses_registry_when_available(tmp_path, monkeypatch):
+    """Make the SQLite render the VS Code prompt source after registry setup.
+
+    Require: the registry has a shared document that differs from the Markdown export.
+    Guarantee: adapter returns rendered registry bytes, not the export file contents.
+    Assert: exact UTF-8 text survives the adapter source boundary.
+    """
+    source = tmp_path / "source.md"
+    source.write_bytes(b"# Registry authority\n")
+    store = RuleStore(tmp_path / "rules.sqlite")
+    store.import_markdown("shared", source)
+    monkeypatch.setattr("adapter.HARNESS_RULES_DB", store.path)
+    monkeypatch.setattr("adapter.HARNESS_AGENTS", tmp_path / "stale.md")
+    (tmp_path / "stale.md").write_text("# stale export\n", encoding="utf-8")
+    assert _harness_agents_text().encode("utf-8") == store.render("shared")
 
 
 def test_all_targets_registered():

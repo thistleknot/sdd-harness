@@ -54,6 +54,18 @@ gate does not fire on them, and they should be deleted, not preserved.
 | Name | Location | Type | Discipline | Intent |
 |---|---|---|---|---|
 | *.md | .specs/ | docs | none | Spec artifacts, including this table. Never gated. |
+| requirements.db | .specs/reqs/ | data | none | Project requirements registry; SQLite is authoritative. Do not render it into docs/requirements.md. |
+| *.md | .specs/reqs/ | docs | none | Requirement interpretations and supporting specification notes. |
+| README.md | instructions/ | docs | none | Operator guide for editing and publishing the SQLite-backed instruction registry. |
+| rules.db | instructions/ | data | none | SQLite authority for imported Markdown rules, ordered source fragments, rule nesting, and change audit. |
+| rules-review.json | instructions/ | data | generated | Readable, deterministic export of registry nodes, outputs, targets, and audit receipts for Git review and restoration. |
+| *.md | instructions/ | docs | generated | Byte-preserving rule-registry exports, source ledger, and harness-specific instruction views. |
+| *.py | instructions/ | code | spec-attribution | Rule-registry import, validation, tree editing, exact renderer, backup, and mapped publication CLI. |
+| test_*.py | instructions/ | test | spec-attribution | Rule-registry round-trip, nested edit, transaction, backup, drift, and adapter projection checks. |
+| *.md | .specs/use_cases/business_use_cases/ | docs | none | Stakeholder goals and outcomes derived from requirements. |
+| *.md | .specs/use_cases/system_use_cases/ | docs | none | System interactions derived after the entity model. |
+| *.md | .specs/model/entity_model/ | docs | none | Entity and relationship model derived from requirements and business use cases. |
+| *.md, *.puml, *.mmd, *.gv, *.png, *.svg | .specs/model/diagrams/ | docs | none | Functional diagram sources and their rendered views, derived from system use cases. |
 | requirements.md | / | docs | none | EARS requirements for the harness itself. |
 | design.md | / | docs | none | Structural and behavioural design of the harness. |
 | tasks.md | / | docs | none | Numbered task catalog; every changed file traces to one. |
@@ -61,6 +73,9 @@ gate does not fire on them, and they should be deleted, not preserved.
 | *.py | specs/ | code | spec-attribution | The specs MCP server, its SQLite store, and the renderers. |
 | *.md | specs/ | docs | generated | Rendered views of the spec DB. Generated — edit the DB, not these. |
 | ** | specs/validators/ | code | spec-attribution | Per-artifact validators the gate runner calls. |
+| sdd_workflow.py | specs/ | code | spec-attribution | Versioned SDD artifact handoffs, ordered profile stages, and resume validation. |
+| test_sdd_workflow.py | specs/ | test | spec-attribution | Varied contract, transition, blocking, and resume conformance checks for SDD handoffs. |
+| sdd-deliverables-contract.md | / | docs | none | Shared artifact types, required metadata, validation, and stage authority consumed by spec and sw-design. |
 | *.py | specs/adapters/ | code | spec-attribution | Spec-layer adapters: Codex and Copilot front ends of the spec store. |
 | .gitignore | specs/ | config | none | Keeps the spec DB's working files out of the vault. |
 | ** | specs/dispositions/ | data | generated | Recorded dispositions: what was decided and why. |

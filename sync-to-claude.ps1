@@ -130,6 +130,10 @@ if ($DryRun) { Write-Host "    (dry run - nothing will be written; pass -Push or
 Write-Host ""
 Write-Host "=== Root instructions ==="
 foreach ($f in @("CLAUDE.md", "SOUL.md", "AGENTS.md")) {
+    if ($f -eq "AGENTS.md" -and (Test-Path (Join-Path $HarnessRoot "instructions\rules.db"))) {
+        Write-Host "  skipped (AGENTS.md is generated from instructions/rules.db; use the registry publish command)" -ForegroundColor DarkGray
+        continue
+    }
     Sync-One -From (Join-Path $from $f) -To (Join-Path $to $f) -Rel $f -Arrow $arrow
 }
 

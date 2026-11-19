@@ -1,10 +1,10 @@
 # Instruction rule registry
 
-`C:\Users\user\.rules\*.md` is the canonical authored source. The SQLite registry holds revisioned publication views for `shared`, `claude`, and `codex`; it is not an independent source of rule text. A rule enters a view only after its frontmatter has an explicitly reviewed `harnesses: [...]` audience and stable `order: NN`; `source` and `source_file` are provenance only. Missing audience is unmapped, not universal, and client-only wording stays scoped to its declared client. The shared view is consumed by both OpenCode and VS Code, so an OpenCode-only rule is rejected until an OpenCode-specific view exists.
+`C:\Users\user\.rules\*.md` is the canonical authored source. The SQLite registry holds revisioned publication views for `shared`, `claude`, and `codex`; it is not an independent source of rule text. A rule enters a view only after its frontmatter has an explicitly reviewed `harnesses: [...]` audience and stable `order: NN`; `source` and `source_file` are provenance only. Missing audience is unmapped, not universal, and client-only wording stays scoped to its declared client. The legacy `shared` view remains consumed by both OpenCode and VS Code; canonical export uses separate per-client views.
 
-The registry currently has no importer from `~/.rules`. Until the adapter export story adds that path, changing a source fragment does not update client views. Do not edit registry nodes as canonical rule changes or publish a stale view as if it reflected `~/.rules`.
+The independently targetable `adapter.py --target instructions` command reads top-level `~/.rules/*.md` fragments. It selects content only when each fragment declares a known `harnesses: [...]` list and integer `order`; `source` and `source_file` remain provenance. Missing scope/order is reported as unmapped, superseded fragments are excluded, unknown audiences fail visibly, and known unsupported Gemini/Hermes destinations are reported and skipped. A mapped client whose audience becomes empty has its generated region removed after the usual baseline checks and backup; an unmapped destination stays untouched. The current 55 fragments have no explicit audience/order, so they currently produce no client output. Do not edit registry nodes as canonical rule changes or publish a stale view as if it reflected `~/.rules`.
 
-The source, scope, preview, drift, backup, and readback contract is documented in [instruction-publication-contract.md](../.specs/reqs/instruction-publication-contract.md). Four rule routes are currently verified; the manifest keeps three planned harness targets marked `NOT_WIRED` and records Gemini and Hermes as skipped or unverified. The seven-client coverage requirement remains open until those three planned routes are wired or evidence changes the requirement.
+The source, scope, preview, drift, backup, and readback contract is documented in [instruction-publication-contract.md](../.specs/reqs/instruction-publication-contract.md). The exporter has native formats for all seven requested clients. Runtime loading for new routes remains open until T5; Gemini and Hermes remain skipped or unverified.
 
 ## Inspect current views
 
@@ -20,14 +20,17 @@ python -m instructions.cli --db $db render shared --out .\instructions\shared-pr
 
 ## Publish a view
 
-Targets must be mapped with their observed baseline digest before publication. The initial registry maps shared, Claude, and Codex views independently. Preview first, then add `--apply`:
+The existing registry publisher remains available for maintained views. For canonical fragment export, preview first; preview is read-only. `--map-baseline` is a separate registry write that records a selected target's current hash without publishing. For Claude and Codex it transfers the old registry mapping only when the old recorded digest still matches. `--apply` requires that mapping and refuses drift:
 
 ```powershell
 python -m instructions.cli --db $db publish claude C:\Users\user\.claude\AGENTS.md .\backups\instructions
 python -m instructions.cli --db $db publish claude C:\Users\user\.claude\AGENTS.md .\backups\instructions --apply
+python adapter.py --target instructions --client claude
+python adapter.py --target instructions --client claude --map-baseline
+python adapter.py --target instructions --client claude --apply
 ```
 
-This publisher currently publishes a registry view and checks its stored source hash and destination baseline; it does not ingest `~/.rules`. The adapter export story will add preview, reviewed fragment-to-view selection, per-target drift disposition, backups, exact readback, and no-op reporting before claiming canonical-source propagation. Claude and Codex load their global `AGENTS.md`; VS Code generation reads the shared view through `adapter.py`; OpenCode loads the shared Markdown through `opencode.json` and `sdd-harness.js`.
+T4 reuses RuleStore source hashing, destination baselines, backup, atomic writing, and exact readback. The adapter emits native outputs for all seven requested clients. Markdown destinations preserve pre-existing text outside the adapter's marked region. VS Code gets a separate additive prompt file, so `sync_vscode` continues to own `harness-core.instructions.md`. Export is opt-in and separate from MCP, skills, and default `--target all`; runtime loading remains for T5. Claude and Codex load global `AGENTS.md`; OpenCode loads its registry Markdown through `opencode.json` and `sdd-harness.js`.
 
 `sync-to-claude.ps1` skips `AGENTS.md` once the registry exists. It is not a route for changing canonical rules. Save a client-side edit as a proposal, reconcile it to the appropriate `~/.rules` fragment and reviewed view mapping, then publish through the adapter. Do not import over a live document as a shortcut: import replaces node IDs and audit history.
 

@@ -1,4 +1,5 @@
 """| Stage | Mechanism | Contract |
+| INSTRUCTIONS | Preview, map, publish, or withdraw explicitly scoped ~/.rules fragments per client | [mandatory] REQ #11-14 |
 | INTEGRATE | Plan/apply/check selected canonical skill packages | [mandatory] R10-R12, R23-R28 |
 
 Spec: docs/playbooks/memory-and-harness-integration.md R10-R12, R23-R28.
@@ -49,6 +50,12 @@ R17: WHEN apply completes with selected router clients, skill sync MUST confirm 
 R18: WHEN skill sync refreshes the canonical retrieval index, it MUST report that visibility is shared across its clients.
 R19: WHEN Codex is selected, skill sync MUST copy selected packages to `$HOME/.agents/skills` and verify every resource there; shared-index membership MUST NOT count as native installation.
 R20: WHEN capability drift checks Codex skills, the declared transport MUST include native copy and MCP, with the native skill directory as its target.
+R21: WHEN `--target instructions` previews source fragments, the adapter MUST perform no filesystem or SQLite writes.
+R22: WHEN `--map-baseline` or `--apply` is selected, the adapter MUST operate only on selected supported RuleStore routes and preserve drift refusal and readback checks.
+R23: IF a source fragment lacks explicit scope or stable order, THEN the adapter MUST report it as unmapped and exclude it from all client views.
+R24: WHERE a selected client has no dedicated native renderer, the adapter MUST report unsupported and MUST NOT route it through a shared view.
+R25: IF a mapped client has no eligible fragments, THEN the adapter MUST remove only its generated managed content after the standard baseline, backup, and readback checks.
+R26: WHEN a fragment names a known harness without a native renderer, the adapter MUST report and skip that destination while continuing supported audience members; unknown names remain errors.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
@@ -81,6 +88,8 @@ except ModuleNotFoundError:
 HARNESS_CONFIG = Path(__file__).parent / "harness.json"
 HARNESS_AGENTS = Path(__file__).parent / "claude" / "AGENTS.md"
 HARNESS_RULES_DB = Path(__file__).parent / "instructions" / "rules.db"
+RULES_SOURCE_DIR = Path.home() / ".rules"
+INSTRUCTION_EXPORT_DIR = Path(__file__).parent / ".tmp" / "instruction-export"
 VSCODE_SHIM = Path(__file__).resolve().parent / "hooks" / "vscode_shim.py"
 # SessionEnd has no VS Code equivalent; SubagentStart/Stop have no Claude-settings hooks to run.
 VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop")
@@ -94,6 +103,8 @@ SKILL_COPY_TARGETS = {'claude': '.claude/skills', 'codex': '.agents/skills', 'co
 SKILL_ROUTER_TARGETS = ('claude', 'codex', 'kiro', 'vscode')
 SKILL_EXCLUDES = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.benchmarks',
                   'node_modules', '.tmp', '.chroma', 'backups', '.ruff_cache'}
+KNOWN_INSTRUCTION_CLIENTS = frozenset({"claude", "opencode", "codex", "vscode", "pi", "kiro", "copilot", "gemini", "hermes"})
+SUPPORTED_INSTRUCTION_CLIENTS = KNOWN_INSTRUCTION_CLIENTS - {"gemini", "hermes"}
 RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
     "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
     "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
@@ -881,6 +892,285 @@ def sync_agents(config: dict, apply: bool = False) -> int:
     return render_agents.main(argv)
 
 
+def _instruction_targets() -> dict[str, Path]:
+    """Return each client's native destination for canonical rule output.
+
+    Require: client loaders and their destinations match the reviewed instruction contract.
+    Guarantee: every selected client maps to a dedicated destination.
+    Maintain: VS Code's incumbent `harness-core` writer retains its separate file.
+    Assert: every target path is absolute and each client maps to one dedicated view.
+    Failure modes: missing native routes are reported by the caller rather than guessed.
+    """
+    home = Path.home()
+    return {
+        "claude": home / ".claude" / "AGENTS.md",
+        "opencode": home / ".config" / "opencode" / "harness-registry-shared.md",
+        "codex": home / ".codex" / "AGENTS.md",
+        "vscode": home / "AppData" / "Roaming" / "Code" / "User" / "prompts" / "harness-rules.instructions.md",
+        "pi": home / ".pi" / "agent" / "extensions" / "harness-steering" / "index.ts",
+        "kiro": home / ".kiro" / "steering" / "harness-core.md",
+        "copilot": home / ".copilot" / "instructions" / "harness-rules.instructions.md",
+    }
+
+
+def _render_instruction_view(client: str, fragments: list[dict]) -> bytes:
+    """Render the selected Markdown bodies in the destination client's native format.
+
+    Require: fragments were validated and ordered by `_instruction_fragments`.
+    Guarantee: returns one complete UTF-8 client view without source frontmatter.
+    Maintain: Pi receives an extension loader; Kiro and Copilot receive native headers.
+    Assert: unsupported clients fail rather than receiving a generic Markdown file.
+    Failure modes: unknown client raises ValueError.
+    """
+    body = "\n".join(item["body"].rstrip("\r\n") for item in fragments).rstrip() + "\n"
+    start_marker = "// HARNESS_RULES_START" if client == "pi" else "<!-- HARNESS_RULES_START -->"
+    end_marker = "// HARNESS_RULES_END" if client == "pi" else "<!-- HARNESS_RULES_END -->"
+    managed = f"{start_marker}\n{body}{end_marker}\n"
+    if client == "pi":
+        text = (
+            'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";\n\n'
+            f'{start_marker}\n'
+            'const instructions = ' + json.dumps(body, ensure_ascii=False) + ';\n'
+            f'{end_marker}\n\n'
+            'export default function (pi: ExtensionAPI): void {\n'
+            '  pi.on("before_agent_start", async (event) => ({\n'
+            '    systemPrompt: `${event.systemPrompt}\\n\\n${instructions}`,\n'
+            '  }));\n'
+            '}\n'
+        )
+    elif client == "kiro":
+        text = "---\ninclusion: always\n---\n\n" + managed
+    elif client == "copilot":
+        text = "---\napplyTo: '**'\n---\n\n" + managed
+    elif client in {"claude", "opencode", "codex", "vscode"}:
+        text = managed
+        if client == "vscode":
+            text = "---\napplyTo: '**'\n---\n\n" + text
+    else:
+        raise ValueError(f"unsupported instruction client: {client}")
+    return text.encode("utf-8")
+
+
+def _merge_instruction_view(client: str, current: bytes, generated: bytes,
+                            *, remove_managed: bool = False) -> bytes | None:
+    """Replace only this adapter's marked region while retaining existing client text.
+
+    Require: generated is one complete native view and current is the observed target bytes.
+    Guarantee: pre-existing user content outside the generated region is byte-preserved; removal empties only generated instructions.
+    Maintain: a target with a conflicting native frontmatter or unmanaged Pi extension is refused.
+    Assert: both generated markers occur together at most once.
+    Failure modes: incomplete or duplicate markers raise ValueError; incompatible target returns None.
+    """
+    text = generated.decode("utf-8")
+    existing = current.decode("utf-8")
+    start_marker = "// HARNESS_RULES_START" if client == "pi" else "<!-- HARNESS_RULES_START -->"
+    end_marker = "// HARNESS_RULES_END" if client == "pi" else "<!-- HARNESS_RULES_END -->"
+    start_count, end_count = existing.count(start_marker), existing.count(end_marker)
+    if start_count != end_count or start_count > 1:
+        raise ValueError(f"{client}: malformed or duplicate generated markers")
+    if remove_managed and start_count == 0:
+        return current
+    if client == "pi":
+        if not existing:
+            return generated
+        if start_count == 0:
+            return None
+        left, rest = existing.split(start_marker, 1)
+        _, right = rest.split(end_marker, 1)
+        # Pi's managed region contains the captured const; an empty generated value keeps the extension valid.
+        new_block = text.split(start_marker, 1)[1].split(end_marker, 1)[0]
+        return (left + start_marker + new_block + end_marker + right).encode("utf-8")
+
+    managed_start = text.find(start_marker)
+    if managed_start < 0:
+        raise ValueError(f"{client}: generated view is missing its start marker")
+    header = text[:managed_start]
+    new_block = text[managed_start:]
+    if not existing:
+        return generated
+    if start_count:
+        left, rest = existing.split(start_marker, 1)
+        _, right = rest.split(end_marker, 1)
+        if remove_managed:
+            return (left + right).encode("utf-8")
+        return (left + new_block.rstrip("\n") + right).encode("utf-8")
+    if client in {"kiro", "copilot", "vscode"}:
+        expected_header = header.strip()
+        frontmatter = re.match(r"\A---\r?\n.*?\r?\n---\r?\n?", existing, re.DOTALL)
+        if frontmatter is None or frontmatter.group(0).strip() != expected_header:
+            return None
+        return (existing.rstrip("\r\n") + "\n\n" + new_block).encode("utf-8")
+    separator = "" if existing.endswith(("\n", "\r")) else "\n"
+    return (existing + separator + "\n" + new_block).encode("utf-8")
+
+
+def _existing_instruction_store(database: Path) -> RuleStore:
+    """Open the configured registry only when it already exists.
+
+    Require: database is the established RuleStore path.
+    Guarantee: instruction operations do not create a parallel registry.
+    Maintain: preview never initializes SQLite or mutates registry rows.
+    Assert: missing database fails before a write is attempted.
+    Failure modes: missing or inaccessible database raises.
+    """
+    if not database.is_file():
+        raise FileNotFoundError(f"instruction registry does not exist: {database}")
+    return RuleStore(database)
+
+
+def _instruction_fragments(source_dir: Path) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Read eligible top-level fragments while preserving source body bytes.
+
+    Require: source_dir contains UTF-8 Markdown fragments with YAML frontmatter.
+    Guarantee: returns explicitly scoped, ordered source records and dispositions for excluded files.
+    Maintain: provenance never grants an audience; superseded material is excluded.
+    Assert: audiences contain known client names and order is a nonnegative integer.
+    Failure modes: malformed YAML, duplicate audience names, or unknown names raise ValueError.
+    """
+    fragments: list[dict] = []
+    dispositions: list[tuple[str, str]] = []
+    for path in sorted(source_dir.glob("*.md"), key=lambda item: item.name.casefold()):
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+        if not text.startswith("---\n") and not text.startswith("---\r\n"):
+            dispositions.append((path.name, "unmapped"))
+            continue
+        match = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", text, re.DOTALL)
+        if not match:
+            raise ValueError(f"{path}: malformed YAML frontmatter")
+        metadata = yaml.safe_load(match.group(1))
+        if not isinstance(metadata, dict):
+            raise ValueError(f"{path}: frontmatter must be a YAML mapping")
+        if metadata.get("superseded_by"):
+            dispositions.append((path.name, "superseded"))
+            continue
+        audience = metadata.get("harnesses")
+        order = metadata.get("order")
+        if not isinstance(audience, list) or not audience or isinstance(order, bool) or not isinstance(order, int) or order < 0:
+            dispositions.append((path.name, "unmapped"))
+            continue
+        if any(not isinstance(name, str) for name in audience) or len(set(audience)) != len(audience):
+            raise ValueError(f"{path}: harnesses must contain unique client names")
+        unknown = set(audience) - KNOWN_INSTRUCTION_CLIENTS
+        if unknown:
+            raise ValueError(f"{path}: unknown harness audience {sorted(unknown)}")
+        unsupported = set(audience) - SUPPORTED_INSTRUCTION_CLIENTS
+        if unsupported:
+            dispositions.append((path.name, f"unsupported audience skipped: {', '.join(sorted(unsupported))}"))
+        body = match.group(2)
+        if body.startswith("\r\n"):
+            body = body[2:]
+        elif body.startswith("\n"):
+            body = body[1:]
+        fragments.append({
+            "path": path,
+            "name": path.name,
+            "order": order,
+            "audience": set(audience),
+            "digest": hashlib.sha256(raw).hexdigest(),
+            "body": body,
+        })
+    return sorted(fragments, key=lambda item: (item["order"], item["name"].casefold())), dispositions
+
+
+def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
+                      map_baseline: bool = False, source_dir: Path = RULES_SOURCE_DIR,
+                      database: Path = HARNESS_RULES_DB) -> int:
+    """Preview or publish explicitly scoped canonical instruction fragments.
+
+    Require: unknown client names are rejected and any publish target is explicitly mapped.
+    Guarantee: preview changes no files or registry rows; apply uses RuleStore backup, drift, and readback checks.
+    Maintain: each client receives only fragments whose explicit audience includes it.
+    Assert: source and target digests are reported for every selected client.
+    Failure modes: malformed metadata, source drift, target drift, and unknown client names fail visibly.
+    """
+    targets = _instruction_targets()
+    selected = clients or list(targets)
+    unknown_clients = sorted(set(selected) - KNOWN_INSTRUCTION_CLIENTS)
+    unsupported_clients = sorted(set(selected) & (KNOWN_INSTRUCTION_CLIENTS - set(targets)))
+    store = _existing_instruction_store(database) if (apply or map_baseline) else None
+    fragments, excluded = _instruction_fragments(source_dir)
+    print(f"Instruction source: {source_dir} ({len(fragments)} eligible, {len(excluded)} excluded)")
+    for filename, disposition in excluded:
+        print(f"  {disposition}: {filename}")
+
+    failures = bool(unknown_clients)
+    for client in selected:
+        if client not in targets:
+            disposition = "unsupported" if client in KNOWN_INSTRUCTION_CLIENTS else "unknown"
+            print(f"  {disposition}: {client} (no verified RuleStore route); skipped")
+            continue
+        selected_fragments = [item for item in fragments if client in item["audience"]]
+        target = targets[client]
+        document_id = f"export-{client}"
+        current = target.read_bytes() if target.is_file() else b""
+        current_digest = hashlib.sha256(current).hexdigest()
+        if database.is_file():
+            with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
+                db.row_factory = sqlite3.Row
+                document = db.execute("SELECT revision,render_sha256 FROM documents WHERE document_id=?", (document_id,)).fetchone()
+                mapping = db.execute("SELECT expected_sha256 FROM targets WHERE document_id=? AND target_path=?",
+                                     (document_id, str(target.resolve()))).fetchone()
+        else:
+            document = mapping = None
+        if not selected_fragments and mapping is None:
+            print(f"  {client}: unmapped (no explicitly scoped source fragments); destination untouched")
+            continue
+        generated = _render_instruction_view(client, selected_fragments)
+        payload = _merge_instruction_view(client, current, generated,
+                                          remove_managed=not selected_fragments)
+        if payload is None:
+            print(f"  {client}: unsupported (destination has unmanaged native content; preserved)")
+            failures = failures or apply or map_baseline
+            continue
+        planned_digest = hashlib.sha256(payload).hexdigest()
+        baseline = mapping["expected_sha256"] if mapping else None
+        if map_baseline:
+            source_path = INSTRUCTION_EXPORT_DIR / f"{document_id}.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(payload)
+            if document is None or (document and document["render_sha256"] != planned_digest):
+                store.import_markdown(document_id, source_path)
+            if mapping is None:
+                former_owner = store.transfer_target(document_id, target, current_digest)
+                owner_note = f"; ownership transferred from {former_owner}" if former_owner and former_owner != document_id else ""
+                print(f"  {client}: baseline mapped {current_digest}{owner_note}; no publish")
+            elif current_digest != baseline:
+                print(f"  {client}: drift_refused expected={baseline} current={current_digest}")
+                failures = True
+            else:
+                print(f"  {client}: baseline unchanged {baseline}")
+            continue
+        if mapping is None:
+            disposition = "unmapped"
+        elif current_digest != baseline:
+            disposition = "drift_refused"
+            failures = True
+        elif current == payload:
+            disposition = "unchanged"
+        else:
+            disposition = "would_write" if not apply else "pending"
+        print(f"  {client}: {disposition} target={target} baseline={baseline or 'unmapped'} current={current_digest} planned={planned_digest}")
+        for item in selected_fragments:
+            print(f"    source={item['name']} sha256={item['digest']}")
+        if apply and disposition == "pending":
+            source_path = INSTRUCTION_EXPORT_DIR / f"{document_id}.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(payload)
+            if document is None or document["render_sha256"] != planned_digest:
+                store.import_markdown(document_id, source_path)
+            store.publish(document_id, target, baseline, BACKUP_RUN, dry_run=False)
+            print(f"  {client}: published and readback verified")
+        elif apply and disposition == "unmapped":
+            print(f"  {client}: refused; run --map-baseline explicitly first")
+            failures = True
+    if unsupported_clients:
+        print(f"Known unsupported clients (no writes attempted): {', '.join(unsupported_clients)}")
+    if unknown_clients:
+        print(f"Unknown clients (no writes attempted): {', '.join(unknown_clients)}")
+    return 1 if failures else 0
+
+
 TARGETS = {
     "claude": sync_claude_code,
     "opencode": sync_opencode,
@@ -891,21 +1181,34 @@ TARGETS = {
     "copilot": sync_github_copilot,
     "vscode": sync_vscode,
 }
-OPT_IN_TARGETS = ("agents", "skills")
+OPT_IN_TARGETS = ("agents", "skills", "instructions")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Sync harness config to all targets")
     parser.add_argument("--target", choices=[*TARGETS, *OPT_IN_TARGETS, "all"], default="all")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--apply", action="store_true", help="agents/skills: apply planned changes")
+    mode.add_argument("--apply", action="store_true", help="apply the selected target's planned changes")
+    parser.add_argument("--map-baseline", action="store_true", help="instructions: register selected target baselines without publishing")
     mode.add_argument('--check', action='store_true', help='skills: report drift without writing')
     parser.add_argument('--skill', nargs='+', help='selected canonical skill packages')
     parser.add_argument('--reconcile', action='store_true', help='skills: preserve/import legacy packages before export')
-    parser.add_argument('--client', nargs='+', choices=sorted(set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS)), help='skills: limit projections and router checks to selected clients')
+    skill_clients = set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS)
+    parser.add_argument('--client', nargs='+', choices=sorted(skill_clients | set(KNOWN_INSTRUCTION_CLIENTS)), help='limit instructions or skills operations to selected clients')
     args = parser.parse_args()
-    if args.target != 'skills' and (args.skill or args.check or args.reconcile or args.client):
-        parser.error('--skill, --check, --reconcile and --client belong to --target skills')
+    if args.target == 'skills' and args.client and not set(args.client) <= skill_clients:
+        parser.error('--target skills accepts only native skill projection clients')
+    if args.target not in ('skills', 'instructions') and (args.skill or args.check or args.reconcile or args.client or args.map_baseline):
+        parser.error('--skill/--check/--reconcile belong to skills; --client/--map-baseline require instructions or skills')
+    if args.target == 'instructions' and (args.skill or args.check or args.reconcile):
+        parser.error('--skill, --check and --reconcile belong to --target skills')
+    if args.map_baseline and args.apply:
+        parser.error('--map-baseline and --apply are separate operations')
+
+    if args.target == 'instructions':
+        if not args.client and not args.apply and not args.map_baseline:
+            print("Previewing supported instruction routes only; use --client to select a subset.")
+        raise SystemExit(sync_instructions(clients=args.client, apply=args.apply, map_baseline=args.map_baseline))
 
     config = load_harness()
     print(f"Loaded harness.json: {len(config['mcp_servers'])} MCP servers")

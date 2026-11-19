@@ -16,7 +16,7 @@ Each view has a declared consumer set. Current sets are `claude -> {claude}`, `c
 
 ## Preview and apply behavior
 
-Preview is read-only. For every selected destination it reports the source fragment and digest, view and revision, destination path, recorded baseline digest, current digest, planned digest, and disposition: `would_write`, `unchanged`, `drift_refused`, `unmapped`, or `unsupported`.
+Preview is read-only. For every selected destination it reports the source fragment and digest, view and revision, destination path, recorded baseline digest, current digest, planned digest, and disposition: `would_write`, `unchanged`, `drift_refused`, `audience_view_mismatch`, `unmapped`, or `unsupported`.
 
 Apply considers each explicitly selected destination independently. If its current digest differs from the recorded baseline, that destination is refused without modifying its bytes or timestamp. Other selected destinations may proceed and must receive separate results. A changed destination is backed up before writing; publication then verifies exact bytes by readback and records source revision/hash and destination digest. If planned bytes already match the destination, publication performs no write and preserves its timestamp.
 

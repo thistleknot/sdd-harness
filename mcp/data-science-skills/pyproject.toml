@@ -6,6 +6,7 @@ dependencies = [
     "fastmcp==2.14.2",
     "langchain-ollama==1.0.1",
     "langchain-postgres==0.0.19",
+    "nltk==3.9.2",
     "neo4j==4.4.13",
     "numpy==1.26.4",
     "psycopg[binary]==3.2.7",

@@ -39,7 +39,7 @@ const SDDHarness = async (ctx) => {
       const sddPrompt = [
         '<sdd-harness>',
         'You are operating under the SDD (Spec-Driven Development) harness.',
-        'Available MCP tools: specs (requirements/tasks/decisions), memory-index (scoped search/open/log/feedback), retrieve-skills (skill retrieval), todo (work tracking).',
+        'OpenCode MCP tool names use the normalized form <server>_<tool>. For harness instructions, call retrieve-skills_retrieve_skills(query, k), then retrieve-skills_read_skill(name). For data-science knowledge, call data-science-skills_retrieve(query, k); use data-science-skills_browse_toc() for its catalog. These are separate servers: do not substitute one for the other or call a bare server label as a tool.',
         '',
         'For memory recall, pass absolute workspace_root and session_id; search then open_memory before citing. After a verified outcome, call memory_feedback with an outcome ID and an evidence reference. Recall current-project evidence plus explicitly shared lessons; keep task state session-scoped and abstain without source evidence. Pass workspace_root to list_todos.',
         'After significant work: log_memory with lessons learned.',

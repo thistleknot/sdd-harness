@@ -1,5 +1,5 @@
 """| Stage | Mechanism | Contract |
-| INSTRUCTIONS | Preview, map, or publish explicitly scoped ~/.rules fragments to selected supported clients | [mandatory] REQ #11-12 |
+| INSTRUCTIONS | Preview, map, publish, or withdraw explicitly scoped ~/.rules fragments per client | [mandatory] REQ #11-14 |
 | INTEGRATE | Plan/apply/check selected canonical skill packages | [mandatory] R10-R12, R23-R28 |
 
 Spec: docs/playbooks/memory-and-harness-integration.md R10-R12, R23-R28.
@@ -54,6 +54,8 @@ R21: WHEN `--target instructions` previews source fragments, the adapter MUST pe
 R22: WHEN `--map-baseline` or `--apply` is selected, the adapter MUST operate only on selected supported RuleStore routes and preserve drift refusal and readback checks.
 R23: IF a source fragment lacks explicit scope or stable order, THEN the adapter MUST report it as unmapped and exclude it from all client views.
 R24: WHERE a selected client has no dedicated native renderer, the adapter MUST report unsupported and MUST NOT route it through a shared view.
+R25: IF a mapped client has no eligible fragments, THEN the adapter MUST remove only its generated managed content after the standard baseline, backup, and readback checks.
+R26: WHEN a fragment names a known harness without a native renderer, the adapter MUST report and skip that destination while continuing supported audience members; unknown names remain errors.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
@@ -101,6 +103,8 @@ SKILL_COPY_TARGETS = {'claude': '.claude/skills', 'codex': '.agents/skills', 'co
 SKILL_ROUTER_TARGETS = ('claude', 'codex', 'kiro', 'vscode')
 SKILL_EXCLUDES = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.benchmarks',
                   'node_modules', '.tmp', '.chroma', 'backups', '.ruff_cache'}
+KNOWN_INSTRUCTION_CLIENTS = frozenset({"claude", "opencode", "codex", "vscode", "pi", "kiro", "copilot", "gemini", "hermes"})
+SUPPORTED_INSTRUCTION_CLIENTS = KNOWN_INSTRUCTION_CLIENTS - {"gemini", "hermes"}
 RETIRED_GRAPHIFY_HOOK_COMMANDS = frozenset({
     "C:/Users/user/.local/bin/graphify.EXE hook-guard search",
     "C:/Users/user/.local/bin/graphify.EXE hook-guard read",
@@ -947,11 +951,12 @@ def _render_instruction_view(client: str, fragments: list[dict]) -> bytes:
     return text.encode("utf-8")
 
 
-def _merge_instruction_view(client: str, current: bytes, generated: bytes) -> bytes | None:
+def _merge_instruction_view(client: str, current: bytes, generated: bytes,
+                            *, remove_managed: bool = False) -> bytes | None:
     """Replace only this adapter's marked region while retaining existing client text.
 
     Require: generated is one complete native view and current is the observed target bytes.
-    Guarantee: pre-existing user content outside the generated region is byte-preserved.
+    Guarantee: pre-existing user content outside the generated region is byte-preserved; removal empties only generated instructions.
     Maintain: a target with a conflicting native frontmatter or unmanaged Pi extension is refused.
     Assert: both generated markers occur together at most once.
     Failure modes: incomplete or duplicate markers raise ValueError; incompatible target returns None.
@@ -963,6 +968,8 @@ def _merge_instruction_view(client: str, current: bytes, generated: bytes) -> by
     start_count, end_count = existing.count(start_marker), existing.count(end_marker)
     if start_count != end_count or start_count > 1:
         raise ValueError(f"{client}: malformed or duplicate generated markers")
+    if remove_managed and start_count == 0:
+        return current
     if client == "pi":
         if not existing:
             return generated
@@ -970,10 +977,10 @@ def _merge_instruction_view(client: str, current: bytes, generated: bytes) -> by
             return None
         left, rest = existing.split(start_marker, 1)
         _, right = rest.split(end_marker, 1)
+        # Pi's managed region contains the captured const; an empty generated value keeps the extension valid.
         new_block = text.split(start_marker, 1)[1].split(end_marker, 1)[0]
         return (left + start_marker + new_block + end_marker + right).encode("utf-8")
 
-    header = ""
     managed_start = text.find(start_marker)
     if managed_start < 0:
         raise ValueError(f"{client}: generated view is missing its start marker")
@@ -984,6 +991,8 @@ def _merge_instruction_view(client: str, current: bytes, generated: bytes) -> by
     if start_count:
         left, rest = existing.split(start_marker, 1)
         _, right = rest.split(end_marker, 1)
+        if remove_managed:
+            return (left + right).encode("utf-8")
         return (left + new_block.rstrip("\n") + right).encode("utf-8")
     if client in {"kiro", "copilot", "vscode"}:
         expected_header = header.strip()
@@ -1018,7 +1027,6 @@ def _instruction_fragments(source_dir: Path) -> tuple[list[dict], list[tuple[str
     Assert: audiences contain known client names and order is a nonnegative integer.
     Failure modes: malformed YAML, duplicate audience names, or unknown names raise ValueError.
     """
-    supported = {"claude", "opencode", "codex", "vscode", "pi", "kiro", "copilot"}
     fragments: list[dict] = []
     dispositions: list[tuple[str, str]] = []
     for path in sorted(source_dir.glob("*.md"), key=lambda item: item.name.casefold()):
@@ -1043,9 +1051,12 @@ def _instruction_fragments(source_dir: Path) -> tuple[list[dict], list[tuple[str
             continue
         if any(not isinstance(name, str) for name in audience) or len(set(audience)) != len(audience):
             raise ValueError(f"{path}: harnesses must contain unique client names")
-        unknown = set(audience) - supported
+        unknown = set(audience) - KNOWN_INSTRUCTION_CLIENTS
         if unknown:
             raise ValueError(f"{path}: unknown harness audience {sorted(unknown)}")
+        unsupported = set(audience) - SUPPORTED_INSTRUCTION_CLIENTS
+        if unsupported:
+            dispositions.append((path.name, f"unsupported audience skipped: {', '.join(sorted(unsupported))}"))
         body = match.group(2)
         if body.startswith("\r\n"):
             body = body[2:]
@@ -1067,34 +1078,31 @@ def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
                       database: Path = HARNESS_RULES_DB) -> int:
     """Preview or publish explicitly scoped canonical instruction fragments.
 
-    Require: every selected client is supported and any publish target is explicitly mapped.
+    Require: unknown client names are rejected and any publish target is explicitly mapped.
     Guarantee: preview changes no files or registry rows; apply uses RuleStore backup, drift, and readback checks.
     Maintain: each client receives only fragments whose explicit audience includes it.
     Assert: source and target digests are reported for every selected client.
-    Failure modes: malformed metadata, source drift, target drift, and unsupported clients fail visibly.
+    Failure modes: malformed metadata, source drift, target drift, and unknown client names fail visibly.
     """
     targets = _instruction_targets()
     selected = clients or list(targets)
-    unsupported = sorted(set(selected) - set(targets))
+    unknown_clients = sorted(set(selected) - KNOWN_INSTRUCTION_CLIENTS)
+    unsupported_clients = sorted(set(selected) & (KNOWN_INSTRUCTION_CLIENTS - set(targets)))
     store = _existing_instruction_store(database) if (apply or map_baseline) else None
     fragments, excluded = _instruction_fragments(source_dir)
     print(f"Instruction source: {source_dir} ({len(fragments)} eligible, {len(excluded)} excluded)")
     for filename, disposition in excluded:
         print(f"  {disposition}: {filename}")
 
-    failures = False
+    failures = bool(unknown_clients)
     for client in selected:
         if client not in targets:
-            print(f"  unsupported: {client} (no verified RuleStore route)")
-            failures = True
+            disposition = "unsupported" if client in KNOWN_INSTRUCTION_CLIENTS else "unknown"
+            print(f"  {disposition}: {client} (no verified RuleStore route); skipped")
             continue
         selected_fragments = [item for item in fragments if client in item["audience"]]
-        if not selected_fragments:
-            print(f"  {client}: unmapped (no explicitly scoped source fragments); destination untouched")
-            continue
         target = targets[client]
         document_id = f"export-{client}"
-        generated = _render_instruction_view(client, selected_fragments)
         current = target.read_bytes() if target.is_file() else b""
         current_digest = hashlib.sha256(current).hexdigest()
         if database.is_file():
@@ -1105,7 +1113,12 @@ def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
                                      (document_id, str(target.resolve()))).fetchone()
         else:
             document = mapping = None
-        payload = _merge_instruction_view(client, current, generated)
+        if not selected_fragments and mapping is None:
+            print(f"  {client}: unmapped (no explicitly scoped source fragments); destination untouched")
+            continue
+        generated = _render_instruction_view(client, selected_fragments)
+        payload = _merge_instruction_view(client, current, generated,
+                                          remove_managed=not selected_fragments)
         if payload is None:
             print(f"  {client}: unsupported (destination has unmanaged native content; preserved)")
             failures = failures or apply or map_baseline
@@ -1151,8 +1164,10 @@ def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
         elif apply and disposition == "unmapped":
             print(f"  {client}: refused; run --map-baseline explicitly first")
             failures = True
-    if unsupported:
-        print(f"Unsupported clients (no writes attempted): {', '.join(unsupported)}")
+    if unsupported_clients:
+        print(f"Known unsupported clients (no writes attempted): {', '.join(unsupported_clients)}")
+    if unknown_clients:
+        print(f"Unknown clients (no writes attempted): {', '.join(unknown_clients)}")
     return 1 if failures else 0
 
 
@@ -1178,8 +1193,11 @@ def main():
     mode.add_argument('--check', action='store_true', help='skills: report drift without writing')
     parser.add_argument('--skill', nargs='+', help='selected canonical skill packages')
     parser.add_argument('--reconcile', action='store_true', help='skills: preserve/import legacy packages before export')
-    parser.add_argument('--client', nargs='+', choices=sorted(set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS) | {"pi", "kiro", "copilot", "opencode"}), help='limit instructions or skills operations to selected clients')
+    skill_clients = set(SKILL_COPY_TARGETS) | set(SKILL_ROUTER_TARGETS)
+    parser.add_argument('--client', nargs='+', choices=sorted(skill_clients | set(KNOWN_INSTRUCTION_CLIENTS)), help='limit instructions or skills operations to selected clients')
     args = parser.parse_args()
+    if args.target == 'skills' and args.client and not set(args.client) <= skill_clients:
+        parser.error('--target skills accepts only native skill projection clients')
     if args.target not in ('skills', 'instructions') and (args.skill or args.check or args.reconcile or args.client or args.map_baseline):
         parser.error('--skill/--check/--reconcile belong to skills; --client/--map-baseline require instructions or skills')
     if args.target == 'instructions' and (args.skill or args.check or args.reconcile):

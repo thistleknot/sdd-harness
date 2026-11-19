@@ -1,12 +1,19 @@
 # Current interpretations
 
+## CURRENT 2026-11-18 — Canonical instruction source and publication views
+
+- Decision: Treat `~/.rules/*.md` as the only authored source of instruction rules; treat SQLite as revisioned publication views, target mappings, and delivery receipts. Require an explicit `harnesses` audience and stable `order` on each published fragment, preserve client-only content, preview without writes, refuse drifted destinations, back up changed targets, verify exact readback, and report unsupported clients without claiming parity. Preserve the seven-harness coverage requirement; T1 verified four routes and left three planned routes `NOT_WIRED`.
+- Basis: The existing harness requirements say rules are authored once at `~/.rules` and projection covers seven installed harnesses; `migrate_rules.py` calls the source canonical. T1 found 55 source fragments without an importer or explicit publication audiences. `source` and `source_file` fields record provenance only. The existing design already uses `harnesses` and `order`, so no second mapping file is introduced. Project requirements #5–#10 in `.specs/reqs/requirements.db` record the publication contract. Global Specs decision IDs #63–#64 were attempted during this work but a follow-up query did not find them; the committed interpretation and registered contract are the durable decision records.
+- View-consumer rule: `shared` is consumed by OpenCode and VS Code, so a fragment scoped only to OpenCode cannot use that view. Reject the audience/view mismatch until a dedicated OpenCode view exists; this prevents shared-view leakage.
+- Supersedes the 2026-11-18 integration-backport interpretation below, which proposed extending registry publication before resolving the canonical source conflict. Its original wording is preserved in [interpretations-history-2026-11-18.md](interpretations-history-2026-11-18.md).
+
 ## 2026-12-31 — Dynamic rule context for OpenCode
 
 - Decision: Apply plan-do through the local plan-todo alias and compare programmatic selection with summarization as an experiment. Basis: the latest request reopens both as candidates and the capability-cone draft prohibits scoring on its runtime route. Feature 14 already owns implementation.
 
-## 2026-11-18: Integration backport planning
+## Superseded interpretation pointer — integration backport planning (2026-11-18)
 
-- Decision: Use plan-do through planning and board handoff. Extend existing registry publication after checking source ownership, and use prior SATNA deployment receipts and bounded routing results to decide what belongs in the export. Basis: plan-todo is absent, the operator requested planning, and existing service and client evidence narrows the remaining work.
+- Original decision and basis moved to [interpretations-history-2026-11-18.md](interpretations-history-2026-11-18.md); T1 established that `~/.rules` has no importer and the SQLite editing-authority wording conflicts with the existing canonical-source requirement.
 
 ## 2026-11-18: Tower defense rerun handoff
 

@@ -202,10 +202,10 @@ note     = "Canonical source is ~/.rules. The registry publisher currently write
 artifact = "instructions"
 harness  = "pi"
 strategy = "GENERATE"
-target   = "C:/Users/user/.pi/agent/extensions/harness-steering/"
-emit     = "extension that injects explicitly scoped rule fragments"
+target   = "C:/Users/user/.pi/agent/extensions/harness-steering/index.ts"
+emit     = "TypeScript extension that injects the rendered rules through before_agent_start"
 status   = "NOT_WIRED"
-note     = "Planned target only: T1 found retrieve-skills installed but no harness-steering extension or shared-rule loader. Verify the native loader before implementation."
+note     = "T4 generates the documented Pi extension format. T5 must verify fresh-session loading before status changes to WIRED."
 
 [[cell]]
 artifact = "instructions"
@@ -220,10 +220,10 @@ note     = "Canonical source is ~/.rules. Current registry publication writes th
 artifact = "instructions"
 harness  = "kiro"
 strategy = "GENERATE"
-target   = "C:/Users/user/.kiro/steering"
+target   = "C:/Users/user/.kiro/steering/harness-core.md"
 emit     = "per-file native steering renders from explicitly scoped fragments"
 status   = "NOT_WIRED"
-note     = "Kiro loads client-specific steering, but no common-rule registry projection or source mapping was found. Preserve those files and verify native mapping before implementation."
+note     = "T4 generates always-included native steering Markdown. T5 must verify fresh-session loading before status changes to WIRED."
 
 [[cell]]
 artifact = "instructions"
@@ -238,19 +238,19 @@ note     = "Current registry publisher writes the mapped view; adapter.py does n
 artifact = "instructions"
 harness  = "vscode"
 strategy = "GENERATE"
-target   = "C:/Users/user/AppData/Roaming/Code/User/prompts/harness-core.instructions.md"
-emit     = "shared registry view rendered by adapter.py sync_vscode"
-status   = "WIRED"
-note     = "Current sync_vscode reads the SQLite shared view; T4 will connect canonical ~/.rules ingestion to selected exports."
+target   = "C:/Users/user/AppData/Roaming/Code/User/prompts/harness-rules.instructions.md"
+emit     = "additive per-user prompt instructions with applyTo frontmatter and a managed rule block"
+status   = "NOT_WIRED"
+note     = "Separate from harness-core.instructions.md, which remains owned by sync_vscode. T5 must verify fresh-session loading before status changes to WIRED."
 
 [[cell]]
 artifact = "instructions"
 harness  = "copilot"
 strategy = "GENERATE"
-target   = "C:/Users/user/.github/copilot-instructions.md"
-emit     = "shared Copilot instructions from explicitly scoped fragments"
+target   = "C:/Users/user/.copilot/instructions/harness-rules.instructions.md"
+emit     = "additive personal modular instruction file with applyTo frontmatter"
 status   = "NOT_WIRED"
-note     = "Planned target only: T1 found MCP configuration and hooks projection but no live shared-instruction destination or rule writer. Verify the user-level path before implementation."
+note     = "Corrected to the personal modular instruction route. T5 must verify fresh-session loading before status changes to WIRED."
 
 [[cell]]
 artifact = "instructions"

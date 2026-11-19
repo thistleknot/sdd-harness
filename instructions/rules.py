@@ -8,7 +8,7 @@ Pipeline:
 | PREVIEW | Render proposed replacement, insertion, or sibling movement without committing | [mandatory] | Requirement #4 |
 | RENDER | Join node bytes by document emission order, independent of tree nesting | [mandatory] | Requirement #4 |
 | RESTORE | Snapshot SQLite and verify the restored rule IDs and render hashes | [mandatory] | Requirement #4 |
-| PUBLISH | Check registered destination baseline then write atomically through harness_write | [mandatory] | Requirement #4 |
+| PUBLISH | Check registered destination baseline, write atomically, and record source revision/hash with exact destination readback | [mandatory] | Requirement #4, REQ #11 |
 
 R1: If any captured source changes after import, edits and publication MUST fail until that source is reimported or explicitly reconciled.
 R2: Each document MUST have one root. Every non-root node has one parent, nonnegative sibling ordinal, stable ID, and only renderable byte-owner nodes occupy a unique emission slot.
@@ -16,6 +16,7 @@ R3: Rendering MUST concatenate exact byte-owner payloads by explicit emissions r
 R4: An imported paragraph is one editable rule. Splitting it requires an explicit edit into ordered byte spans and child nodes.
 R5: Every committed edit and audit receipt MUST share one transaction.
 R6: A publication MUST check the target's last recorded digest, and exact readback MUST match the rendered bytes.
+R7: WHEN publication succeeds, its history receipt MUST include the source document revision and source SHA-256 used for the exact rendered output.
 
 CLOSED: Markdown parse-and-reserialize is rejected because it can normalize source whitespace. Tree-only rendering is rejected because nested headings reorder bytes. The global emission sequence is authoritative.
 Preconditions: Import source is UTF-8 Markdown. SQLite path and every destination are explicit.
@@ -84,6 +85,8 @@ CREATE TABLE IF NOT EXISTS target_history (
     before_sha256 TEXT NOT NULL,
     rendered_sha256 TEXT NOT NULL,
     status TEXT NOT NULL,
+    source_revision INTEGER,
+    source_sha256 TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -107,6 +110,11 @@ class RuleStore:
             document_columns={row["name"] for row in db.execute("PRAGMA table_info(documents)")}
             if "render_sha256" not in document_columns:
                 db.execute("ALTER TABLE documents ADD COLUMN render_sha256 TEXT NOT NULL DEFAULT ''")
+            history_columns={row["name"] for row in db.execute("PRAGMA table_info(target_history)")}
+            if "source_revision" not in history_columns:
+                db.execute("ALTER TABLE target_history ADD COLUMN source_revision INTEGER")
+            if "source_sha256" not in history_columns:
+                db.execute("ALTER TABLE target_history ADD COLUMN source_sha256 TEXT")
             db.execute(
                 """INSERT OR IGNORE INTO emissions(document_id,emission,node_id)
                    SELECT document_id,emission,node_id FROM nodes
@@ -527,7 +535,7 @@ class RuleStore:
         import harness_write
 
         with self.connect() as db:
-            source=db.execute("SELECT source_path,source_sha256 FROM documents WHERE document_id=?",
+            source=db.execute("SELECT source_path,source_sha256,revision FROM documents WHERE document_id=?",
                               (document_id,)).fetchone()
         if source is None:
             raise KeyError(document_id)
@@ -539,8 +547,12 @@ class RuleStore:
         current=target.read_bytes() if target.exists() else b""
         current_hash=hashlib.sha256(current).hexdigest()
         with self.connect() as db:
+            other_owner=db.execute("SELECT document_id FROM targets WHERE target_path=? AND document_id<>?",
+                                   (str(target),document_id)).fetchone()
             recorded=db.execute("SELECT expected_sha256 FROM targets WHERE document_id=? AND target_path=?",
                                 (document_id,str(target))).fetchone()
+        if other_owner is not None:
+            raise RuntimeError(f"target is owned by another view: {other_owner['document_id']}")
         if recorded is None:
             raise RuntimeError("target is not mapped; register its baseline before publishing")
         if expected_sha256 is not None and expected_sha256!=recorded["expected_sha256"]:
@@ -561,8 +573,8 @@ class RuleStore:
             raise RuntimeError("published target readback mismatch")
         with self.connect() as db:
             with db:
-                db.execute("INSERT INTO target_history(document_id,target_path,before_sha256,rendered_sha256,status) VALUES(?,?,?,?,?)",
-                           (document_id,str(target),current_hash,digest,"PUBLISHED"))
+                db.execute("INSERT INTO target_history(document_id,target_path,before_sha256,rendered_sha256,status,source_revision,source_sha256) VALUES(?,?,?,?,?,?,?)",
+                           (document_id,str(target),current_hash,digest,"PUBLISHED",source["revision"],source["source_sha256"]))
                 db.execute("INSERT INTO targets(document_id,target_path,expected_sha256,rendered_sha256) VALUES(?,?,?,?) "
                            "ON CONFLICT(document_id,target_path) DO UPDATE SET expected_sha256=excluded.expected_sha256,rendered_sha256=excluded.rendered_sha256",
                            (document_id,str(target),digest,digest))
@@ -587,12 +599,49 @@ class RuleStore:
             with db:
                 if db.execute("SELECT 1 FROM documents WHERE document_id=?",(document_id,)).fetchone() is None:
                     raise KeyError(document_id)
+                other=db.execute("SELECT document_id FROM targets WHERE target_path=? AND document_id<>?",
+                                 (str(target),document_id)).fetchone()
+                if other:
+                    raise RuntimeError(f"target is already owned by {other['document_id']}; use transfer_target")
                 prior=db.execute("SELECT 1 FROM targets WHERE document_id=? AND target_path=?",
                                  (document_id,str(target))).fetchone()
                 if prior:
                     raise RuntimeError("target mapping already exists")
                 db.execute("INSERT INTO targets(document_id,target_path,expected_sha256,rendered_sha256) VALUES(?,?,?,?)",
                            (document_id,str(target),actual,actual))
+
+    def transfer_target(self, document_id: str, target: Path, baseline_sha256: str) -> str | None:
+        """Transfer one destination baseline to a new derived view without changing target bytes.
+
+        Require: target bytes match the observed baseline; destination and receiving document are explicit.
+        Guarantee: exactly one document owns the target mapping after success; prior history remains intact.
+        Maintain: ownership transfer never publishes or overwrites client content.
+        Assert: duplicate owners, missing receiver, or baseline drift abort the transaction.
+        Returns: the former owner document ID, or None when the destination was unmapped.
+        Failure modes: target drift, unknown receiver, or conflicting owners raises RuntimeError/KeyError.
+        """
+        target=Path(target).resolve()
+        current=target.read_bytes() if target.exists() else b""
+        actual=hashlib.sha256(current).hexdigest()
+        if actual!=baseline_sha256:
+            raise RuntimeError(f"target baseline mismatch: expected {baseline_sha256}, found {actual}")
+        with self.connect() as db:
+            with db:
+                if db.execute("SELECT 1 FROM documents WHERE document_id=?",(document_id,)).fetchone() is None:
+                    raise KeyError(document_id)
+                owners=db.execute("SELECT document_id,expected_sha256 FROM targets WHERE target_path=? ORDER BY document_id",
+                                  (str(target),)).fetchall()
+                if len(owners)>1:
+                    raise RuntimeError("target has multiple existing owners")
+                prior=owners[0]["document_id"] if owners else None
+                if prior is not None and owners[0]["expected_sha256"]!=actual:
+                    raise RuntimeError(f"target drift from prior owner {prior}: expected {owners[0]['expected_sha256']}, found {actual}")
+                if prior==document_id:
+                    return prior
+                db.execute("DELETE FROM targets WHERE target_path=?",(str(target),))
+                db.execute("INSERT INTO targets(document_id,target_path,expected_sha256,rendered_sha256) VALUES(?,?,?,?)",
+                           (document_id,str(target),actual,actual))
+        return prior
 
     def export_review(self) -> str:
         """Serialize complete registry state as deterministic, reviewable JSON text.
@@ -643,6 +692,8 @@ class RuleStore:
                         if table=="nodes":
                             text=values.pop("payload_text")
                             values["payload"]=text.encode("utf-8")
+                        if table=="target_history" and expected-set(values)=={"source_revision","source_sha256"}:
+                            values.update(source_revision=None,source_sha256=None)
                         if set(values)!=expected:
                             raise ValueError(f"invalid fields in {table} export row")
                         columns=sorted(expected)

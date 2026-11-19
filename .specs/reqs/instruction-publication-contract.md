@@ -2,7 +2,7 @@
 
 **Status:** Current design contract for Kanban feature 15, story T2. The importer and adapter export are not implemented yet; T4 owns those changes.
 
-**Authority:** Specs decisions #63–#64 and project requirements #5–#10.
+**Authority:** Project requirements #5–#10 in `.specs/reqs/requirements.db`; the current decision and its evidence are recorded in `.specs/reqs/interpretations.md`. The attempted global Specs decisions #63–#64 were not returned by a later query and are not treated as persisted records.
 
 ## Ownership and flow
 
@@ -12,7 +12,7 @@ The publication flow is:
 
 `approved ~/.rules fragment -> explicit source-to-view mapping -> rendered SQLite view -> mapped client destination -> exact readback receipt`
 
-Shared text may reach multiple views only after review of placement in each view. A client-only fragment declares only that client's name in `harnesses`. Existing client-only material stays in its view and destination. A missing audience produces `unmapped`; an unsupported declared target produces `unsupported`; neither is permission to broadcast.
+Each view has a declared consumer set. Current sets are `claude -> {claude}`, `codex -> {codex}`, and `shared -> {opencode, vscode}`. A fragment may enter a view only when every consumer of that view is included in the fragment's explicit `harnesses` audience. A fragment scoped to one member of a shared view is rejected as `audience_view_mismatch`; it is never broadened to the other consumer. Publishing such a fragment requires a dedicated view and destination for that client. Shared text may reach multiple views only after review of placement in each view. Existing client-only material stays in its view and destination. A missing audience produces `unmapped`; an unsupported declared target produces `unsupported`; neither is permission to broadcast.
 
 ## Preview and apply behavior
 
@@ -28,9 +28,10 @@ The adapter must expose instruction publication as a targetable operation. MCP, 
 | --- | --- | --- | --- | --- |
 | Approved shared rule change | An approved edit to `~/.rules/010-operating-core.md` declares `harnesses: [claude, opencode, codex, vscode]` and `order: 10`. | Report all four destinations, their current and planned digests, and no file writes. | Back up and update only changed mapped outputs, verify exact readback, and leave the output unchanged on a repeated run. | Contract defined; the source fragment has no explicit audience today, and no `.rules` importer or adapter rule-export route exists yet. |
 | Client-only rule | A fixture fragment declares `harnesses: [claude]` and a stable order. Its `source: claude` provenance alone is not sufficient to create this scope. | Show the Claude destination; report other clients as unmapped or unsupported. | Publish only the Claude destination and preserve shared, Codex, OpenCode, and VS Code output bytes. | Contract defined; fragment scope mapping is not implemented yet. |
+| OpenCode-only rule | A fixture fragment declares `harnesses: [opencode]` and a stable order, while the only current OpenCode route is the `shared` view consumed by OpenCode and VS Code. | Report `audience_view_mismatch` for the shared view and perform no writes. | Refuse publication until a dedicated OpenCode view and destination are defined; do not leak the rule to VS Code. | Contract defined; no OpenCode-specific view exists. |
 | Drifted destination | A selected generated destination has bytes different from its recorded baseline. | Report `drift_refused` with expected and observed digests, without writes. | Preserve the drifted file and timestamp, refuse that target, and report outcomes for any other selected target independently. | Existing registry publication has digest checks; the `.rules`-to-adapter path has not been implemented or exercised. |
 
-These cases validate the intended contract, not the current runtime. T4 must implement the importer and isolated publication path; T5 must exercise the three cases on scratch destinations before claiming propagation.
+These cases validate the intended contract, not the current runtime. T4 must implement the importer and isolated publication path; T5 must exercise these cases on scratch destinations before claiming propagation.
 
 ## Client routes from T1 inventory
 

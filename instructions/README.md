@@ -1,6 +1,6 @@
 # Instruction rule registry
 
-`C:\Users\user\.rules\*.md` is the canonical authored source. The SQLite registry holds revisioned publication views for `shared`, `claude`, and `codex`; it is not an independent source of rule text. A rule enters a view only after its frontmatter has an explicitly reviewed `harnesses: [...]` audience and stable `order: NN`; `source` and `source_file` are provenance only. Missing audience is unmapped, not universal, and client-only wording stays scoped to its declared client.
+`C:\Users\user\.rules\*.md` is the canonical authored source. The SQLite registry holds revisioned publication views for `shared`, `claude`, and `codex`; it is not an independent source of rule text. A rule enters a view only after its frontmatter has an explicitly reviewed `harnesses: [...]` audience and stable `order: NN`; `source` and `source_file` are provenance only. Missing audience is unmapped, not universal, and client-only wording stays scoped to its declared client. The shared view is consumed by both OpenCode and VS Code, so an OpenCode-only rule is rejected until an OpenCode-specific view exists.
 
 The registry currently has no importer from `~/.rules`. Until the adapter export story adds that path, changing a source fragment does not update client views. Do not edit registry nodes as canonical rule changes or publish a stale view as if it reflected `~/.rules`.
 

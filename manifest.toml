@@ -193,32 +193,76 @@ reason   = "Cannot deny a tool call. Enforcement is structurally impossible here
 artifact = "instructions"
 harness  = "claude"
 strategy = "GENERATE"
-target   = "C:/Users/user/.claude/CLAUDE.md"
-emit     = "flattened always-on"
-note     = "CLAUDE.md is unconditional; inclusion:auto docs must be dropped or spilled to skills."
+target   = "C:/Users/user/.claude/AGENTS.md"
+emit     = "reviewed Claude view; CLAUDE.md imports AGENTS.md"
+status   = "WIRED"
+note     = "Canonical source is ~/.rules. The registry publisher currently writes this mapped view; sync-to-claude.ps1 skips it once the registry exists."
 
 [[cell]]
 artifact = "instructions"
 harness  = "pi"
 strategy = "GENERATE"
 target   = "C:/Users/user/.pi/agent/extensions/harness-steering/"
-emit     = "extension that injects at runtime"
-note     = "Largest GENERATE cost in the installer: pi has NO native always-on mechanism at all."
+emit     = "extension that injects explicitly scoped rule fragments"
+status   = "NOT_WIRED"
+note     = "Planned target only: T1 found retrieve-skills installed but no harness-steering extension or shared-rule loader. Verify the native loader before implementation."
 
 [[cell]]
 artifact = "instructions"
 harness  = "opencode"
 strategy = "GENERATE"
-target   = "C:/Users/user/.config/opencode/plugin/harness-steering.ts"
-emit     = "experimental.chat.system.transform push"
-note     = "Upstream-flagged experimental; pin behaviour and fail soft if the hook disappears."
+target   = "C:/Users/user/.config/opencode/harness-registry-shared.md"
+emit     = "reviewed shared view loaded by opencode.json and plugins/sdd-harness.js"
+status   = "WIRED"
+note     = "Canonical source is ~/.rules. Current registry publication writes this file; adapter.py sync_opencode only writes MCP configuration."
 
 [[cell]]
 artifact = "instructions"
 harness  = "kiro"
-strategy = "LINK"
+strategy = "GENERATE"
 target   = "C:/Users/user/.kiro/steering"
-note     = "Native frontmatter == our interlingua, so this is the one lossless cell. Unenforced."
+emit     = "per-file native steering renders from explicitly scoped fragments"
+status   = "NOT_WIRED"
+note     = "Kiro loads client-specific steering, but no common-rule registry projection or source mapping was found. Preserve those files and verify native mapping before implementation."
+
+[[cell]]
+artifact = "instructions"
+harness  = "codex"
+strategy = "GENERATE"
+target   = "C:/Users/user/.codex/AGENTS.md"
+emit     = "reviewed Codex view from the canonical ~/.rules source"
+status   = "WIRED"
+note     = "Current registry publisher writes the mapped view; adapter.py does not currently publish rule text."
+
+[[cell]]
+artifact = "instructions"
+harness  = "vscode"
+strategy = "GENERATE"
+target   = "C:/Users/user/AppData/Roaming/Code/User/prompts/harness-core.instructions.md"
+emit     = "shared registry view rendered by adapter.py sync_vscode"
+status   = "WIRED"
+note     = "Current sync_vscode reads the SQLite shared view; T4 will connect canonical ~/.rules ingestion to selected exports."
+
+[[cell]]
+artifact = "instructions"
+harness  = "copilot"
+strategy = "GENERATE"
+target   = "C:/Users/user/.github/copilot-instructions.md"
+emit     = "shared Copilot instructions from explicitly scoped fragments"
+status   = "NOT_WIRED"
+note     = "Planned target only: T1 found MCP configuration and hooks projection but no live shared-instruction destination or rule writer. Verify the user-level path before implementation."
+
+[[cell]]
+artifact = "instructions"
+harness  = "gemini"
+strategy = "SKIP"
+reason   = "Gemini CLI is not installed, so no shared-instruction route is verified."
+
+[[cell]]
+artifact = "instructions"
+harness  = "hermes"
+strategy = "SKIP"
+reason   = "No shared-rule renderer or live instruction destination was established."
 
 # ---------------------------------------------------------------- agents
 

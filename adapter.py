@@ -96,6 +96,7 @@ VSCODE_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToo
 OPENCODE_LOCAL_TIMEOUT_MS = 240000
 # OMO-slim was uninstalled 2026-11-08; it must never load from any opencode config.
 RETIRED_OPENCODE_PLUGINS = frozenset({"oh-my-opencode-slim"})
+MANAGED_OPENCODE_PLUGIN_CONFIG = "opencode_plugins"
 HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
 BACKUP_RUN = Path.home() / '.harness/backups' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + uuid4().hex[:8])
 SKILL_COPY_TARGETS = {'claude': '.claude/skills', 'codex': '.agents/skills', 'copilot': '.copilot/skills',
@@ -389,6 +390,22 @@ def sync_opencode(config: dict) -> None:
             mcp[name] = entry
 
     changed = write_server_projection(oc_json, "mcp", mcp, jsonc=True)
+    managed_plugins = config.get(MANAGED_OPENCODE_PLUGIN_CONFIG, [])
+    if managed_plugins:
+        text = oc_json.read_text(encoding="utf-8")
+        data = harness_write.load_jsonc(text)
+        plugins = data.get("plugin", [])
+        if not isinstance(plugins, list):
+            raise harness_write.WriteError(f"{oc_json}: expected an array at 'plugin'")
+        merged_plugins = list(dict.fromkeys([*plugins, *managed_plugins]))
+        if merged_plugins != plugins:
+            data["plugin"] = merged_plugins
+            artifact = harness_write.Artifact(
+                path=oc_json,
+                text=json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                mode="file",
+            )
+            changed = bool(harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN)) or changed
     print(f"  opencode: {'updated' if changed else 'unchanged'} {oc_json} ({len(mcp)} servers)")
 
 

@@ -102,6 +102,7 @@ def test_sync_opencode_uses_native_remote_and_local_schema(config, tmp_path):
     oc_dir.mkdir(parents=True)
     oc_json = oc_dir / "opencode.json"
     oc_json.write_text("{}", encoding="utf-8")
+    config["opencode_plugins"] = ["@tarquinen/opencode-dcp@latest"]
     with patch("adapter.Path.home", return_value=tmp_path):
         sync_opencode(config)
     data = json.loads(oc_json.read_text())
@@ -110,6 +111,7 @@ def test_sync_opencode_uses_native_remote_and_local_schema(config, tmp_path):
     assert data["mcp"]["todo"]["command"] == ["python", "todo_mcp.py"]
     assert data["mcp"]["todo"]["timeout"] == 240000
     assert data["mcp"]["todo"]["environment"] == {"PYTHONUTF8": "1"}
+    assert data["plugin"] == ["@tarquinen/opencode-dcp@latest"]
 
 
 def test_sync_opencode_reads_block_comments_trailing_commas_and_keeps_other_keys(config, tmp_path):

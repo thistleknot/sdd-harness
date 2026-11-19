@@ -57,6 +57,9 @@
       ]
     }
   },
+  "opencode_plugins": [
+    "@tarquinen/opencode-dcp@latest"
+  ],
   "global_hooks": {
     "claude": [
       {

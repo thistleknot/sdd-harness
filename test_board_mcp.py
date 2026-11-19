@@ -1,6 +1,16 @@
-"""test_board_mcp.py — tests for board_mcp.py through a real in-memory fastmcp client.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| FIXTURE | Create disposable Git repositories and board databases | [mandatory] | R1 |
+| EXERCISE | Call registered tools through an in-memory FastMCP client | [mandatory] | R1-R3 |
+| VERIFY | Assert lifecycle, revision binding and worktree effects | [contract] | R1-R3 |
 
-Spec: specs.db REQ #40, #41, #42, #43. Task: specs.db task #67; plan.md T4.
+Spec: specs.db REQ #40-#43; task #67.
+R1: Tests shall use isolated repositories and database files.
+R2: WHEN a branch moves after submission, packet retrieval and acceptance shall refuse.
+R3: WHEN the branch is rejected and resubmitted, the new receipt shall identify its new HEAD.
+CLOSED: Direct function-only tests do not verify MCP parameter and ToolError behavior.
+Preconditions: Git, FastMCP and pytest are installed.
+Failure modes: a failed lifecycle assertion or leaked external state fails the test.
 """
 import asyncio
 import os
@@ -81,6 +91,8 @@ def test_full_path(repo):
     assert "feature_file.txt" in packet["diff"]
     assert packet["acceptance_checks"] == ["check one"]
     assert "ALL CHECKS PASSED 7" in packet["verification_output"]
+    assert packet["verified_head"] == git(wt, "rev-parse", "HEAD").strip()
+    assert packet["submitted_at"]
     assert packet["next_action"]
     done = call("accept_story", project_root=str(repo), session="R", story_id=a["id"])
     assert done["status"] == "done"
@@ -88,7 +100,47 @@ def test_full_path(repo):
     assert git(repo, "log", "--merges", "--oneline").strip()
     assert not wt.exists()
     assert branches(repo) == ""
-    cb = call("claim_story", project_root=str(repo), session="C", story_id=b["id"])
+
+
+def test_changed_branch_blocks_packet_and_accept_until_resubmitted(repo):
+    """Refuse stale review evidence and accept only after a fresh receipt.
+
+    Require: two dependent stories on a disposable Git repository.
+    Guarantee: an advanced branch cannot enter the main branch until resubmission.
+    Maintain: the reviewer remains independent from the assigning session.
+    Assert: packet and acceptance reject the moved HEAD; resubmitted HEAD is accepted.
+    """
+    _feature, story, dependent = setup_two(repo)
+    claimed = call("claim_story", project_root=str(repo), session="A", story_id=story["id"])
+    worktree = Path(claimed["worktree_path"])
+    commit_in(worktree, "verified.txt")
+    first_head = git(worktree, "rev-parse", "HEAD").strip()
+    call("submit_story", project_root=str(repo), session="A", story_id=story["id"],
+         verification_output="first revision checked")
+    packet = call("get_review_packet", project_root=str(repo), session="R", story_id=story["id"])
+    assert packet["verified_head"] == first_head
+    assert "first revision checked" == packet["verification_output"]
+    assert git(worktree, "rev-parse", "HEAD").strip() == packet["verified_head"]
+
+    commit_in(worktree, "unverified.txt")
+    with pytest.raises(ToolError, match="Branch advanced after verification"):
+        call("get_review_packet", project_root=str(repo), session="R", story_id=story["id"])
+    with pytest.raises(ToolError, match="Branch advanced after verification"):
+        call("accept_story", project_root=str(repo), session="R", story_id=story["id"])
+    assert (repo / "unverified.txt").is_file() is False
+
+    call("reject_story", project_root=str(repo), session="R", story_id=story["id"],
+         note="Review the updated branch.")
+    updated_head = git(worktree, "rev-parse", "HEAD").strip()
+    call("submit_story", project_root=str(repo), session="A", story_id=story["id"],
+         verification_output="updated revision checked")
+    packet = call("get_review_packet", project_root=str(repo), session="R", story_id=story["id"])
+    assert packet["verified_head"] == updated_head
+    assert packet["verified_head"] != first_head
+    assert packet["verification_output"] == "updated revision checked"
+    assert call("accept_story", project_root=str(repo), session="R", story_id=story["id"])["status"] == "done"
+    assert (repo / "unverified.txt").is_file()
+    cb = call("claim_story", project_root=str(repo), session="C", story_id=dependent["id"])
     assert cb["status"] == "in-progress" and Path(cb["worktree_path"]).is_dir()
 
 

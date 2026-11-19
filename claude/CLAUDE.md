@@ -5,6 +5,7 @@ Anything domain-conditional is a skill. Anything needing its own context is a su
 
 @~/.harness/constitution.md
 @~/.skills/GLOSSARY.md
+@~/.claude/AGENTS.md
 
 ## Workflow
 
@@ -65,6 +66,11 @@ never the debugging loop. Done means resumed throughput past a stated threshold.
 Executive decisions are yours; log the basis and keep moving. Only valid stops:
 missing credentials, spec contradiction with no derivable default, destructive
 action outside stated scope. A question that misses those bars is a defect.
+
+**Approval scope.** The operator approves only the feature sets they submit. Every
+derived artifact (requirements, design, tasks, diagrams, entity model, UML) proceeds
+without approval; the operator reviews them after the fact by question. Source:
+`~/.harness/rules/approval-scope.md`. The spec gate is advisory (`~/.claude/hooks/spec_gate.py`).
 
 **Never ask the obvious.** If the next step follows from what was just agreed,
 take it. Do not close a reply with "Want me to X?" when X is the only sensible
@@ -626,3 +632,7 @@ and unit tests fail fast — no try/except with fallbacks there.
 Verify a name is actually registered before delegating to it — check the `subagent`
 tool's `{action:"list"}` and the `<available_skills>` injection. Do not assume a name
 resolves.
+
+@RTK.md
+
+@../.tessl/RULES.md

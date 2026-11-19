@@ -1,52 +1,67 @@
 {
-  "model": "sonnet",
+  "model": "haiku",
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
+    "context7@claude-plugins-official": false,
     "skill-creator@claude-plugins-official": true,
     "github@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true
+    "commit-commands@claude-plugins-official": true,
+    "caveman@caveman": true,
+    "aiup-core@ai-unified-process-marketplace": true
   },
   "hooks": {
-    "SessionStart": {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/membank.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/log_event.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.harness/hooks/session_resume.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/playbook.py",
-          "timeout": 10
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/process_ledger.py --watermark",
-          "timeout": 10
-        }
-      ]
-    },
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/membank.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.harness/hooks/session_resume.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/playbook.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/process_ledger.py --watermark",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/membank.py",
+            "timeout": 90
           },
           {
             "type": "command",
@@ -75,6 +90,16 @@
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/playbook.py --plan",
             "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 60
           }
         ]
       },
@@ -126,6 +151,35 @@
             "type": "command",
             "command": "python C:/Users/user/.claude/hooks/source_write_guard.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/AppData/Roaming/npm/caveman.CMD' shrink-hook",
+            "shell": "powershell",
+            "timeout": 30
           }
         ]
       },
@@ -207,68 +261,144 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
       }
     ],
-    "SessionEnd": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_end.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/verify_gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/log_event.py"
+          },
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/self_review.py"
+          },
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/review_changes.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_handoff.py --mode handoff"
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/task_lineage.py",
+            "timeout": 15,
+            "statusMessage": "Checking file-to-task lineage..."
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/file_manifest.py --audit",
+            "timeout": 15,
+            "statusMessage": "Auditing unclaimed files..."
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/user/.claude/hooks/process_ledger.py",
+            "timeout": 10,
+            "statusMessage": "Checking process ledger..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/pre_compact.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+            "shell": "powershell",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": {
       "hooks": [
         {
           "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/log_event.py"
-        },
-        {
-          "type": "command",
-          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_end.py"
+          "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+          "shell": "powershell",
+          "timeout": 30
         }
       ]
     },
-    "Stop": {
+    "SubagentStart": {
       "hooks": [
         {
           "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/verify_gate.py"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/log_event.py"
-        },
-        {
-          "type": "command",
-          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/self_review.py"
-        },
-        {
-          "type": "command",
-          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/review_changes.py",
-          "timeout": 10
-        },
-        {
-          "type": "command",
-          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/session_handoff.py --mode handoff"
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/task_lineage.py",
-          "timeout": 15,
-          "statusMessage": "Checking file-to-task lineage..."
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/file_manifest.py --audit",
-          "timeout": 15,
-          "statusMessage": "Auditing unclaimed files..."
-        },
-        {
-          "type": "command",
-          "command": "python C:/Users/user/.claude/hooks/process_ledger.py",
-          "timeout": 10,
-          "statusMessage": "Checking process ledger..."
+          "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+          "shell": "powershell",
+          "timeout": 30
         }
       ]
     },
-    "PreCompact": {
+    "SubagentStop": {
       "hooks": [
         {
           "type": "command",
-          "command": "C:/Users/user/py310/Scripts/python.exe C:/Users/user/.harness/hooks/pre_compact.py"
+          "command": "& 'C:/Users/user/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter 'C:/Users/user/AppData/Roaming/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js'",
+          "shell": "powershell",
+          "timeout": 30
         }
       ]
     }
@@ -280,7 +410,8 @@
   "theme": "dark",
   "env": {
     "MCP_TIMEOUT": "120000",
-    "MCP_TOOL_TIMEOUT": "120000"
+    "MCP_TOOL_TIMEOUT": "900000",
+    "ENABLE_TOOL_SEARCH": "auto"
   },
   "autoUpdatesChannel": "latest",
   "agentPushNotifEnabled": true,
@@ -290,14 +421,14 @@
       "### Org-wide",
       "**Organization**: None configured",
       "**Cloud provider(s)**: None configured",
-      "**Repository visibility**: Not queryable here (no git remotes configured for this repo) \u2014 assume private unless later shown otherwise",
-      "**Internal sharing / snippet hosting**: None configured \u2014 treat public paste/gist services as outside the trust boundary",
+      "**Repository visibility**: Not queryable here (no git remotes configured for this repo) \u00e2\u20ac\u201d assume private unless later shown otherwise",
+      "**Internal sharing / snippet hosting**: None configured \u00e2\u20ac\u201d treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
-      "**Default / protected branches**: Not queryable here (no remotes; default branch unknown \u2014 origin/HEAD unset)",
+      "**Default / protected branches**: Not queryable here (no remotes; default branch unknown \u00e2\u20ac\u201d origin/HEAD unset)",
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
-      "**Host containment**: None configured \u2014 assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
-      "**Source control**: The trusted repo only (no remotes configured) \u2014 no additional orgs configured",
+      "**Host containment**: None configured \u00e2\u20ac\u201d assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repo only (no remotes configured) \u00e2\u20ac\u201d no additional orgs configured",
       "**Trusted internal domains**: None configured",
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: None configured",
@@ -305,16 +436,38 @@
       "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
       "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
-      "**Protected deployment namespaces / environments**: None configured \u2014 fall back to the Sensitive remote targets heuristic",
+      "**Protected deployment namespaces / environments**: None configured \u00e2\u20ac\u201d fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
-      "**Repository visibility**: unverified \u2014 origin remote is absent, so this repo's host/visibility could not be checked here; treat as possibly public until confirmed",
-      "**Default / protected branches**: unknown \u2014 origin/HEAD unset and no remotes configured; branch protection not queryable",
-      "**Source control**: The trusted repo (d:\\c\\arxiv_id_lists) only \u2014 no remotes configured, no additional orgs configured",
+      "**Repository visibility**: unverified \u00e2\u20ac\u201d origin remote is absent, so this repo's host/visibility could not be checked here; treat as possibly public until confirmed",
+      "**Default / protected branches**: unknown \u00e2\u20ac\u201d origin/HEAD unset and no remotes configured; branch protection not queryable",
+      "**Source control**: The trusted repo (d:\\c\\arxiv_id_lists) only \u00e2\u20ac\u201d no remotes configured, no additional orgs configured",
       "### User-specific",
       "**Primary use of Claude Code**: software development",
-      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) \u2014 no remotes configured, so no remote scoping applies",
+      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) \u00e2\u20ac\u201d no remotes configured, so no remote scoping applies",
       "**Org-specific CLIs**: None configured",
-      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) \u2014 no remotes configured, visibility unverified so treat as possibly public for commit/push scoping"
+      "**Trusted repo**: The git repository at d:\\c\\arxiv_id_lists (its working directory) \u00e2\u20ac\u201d no remotes configured, visibility unverified so treat as possibly public for commit/push scoping"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "ai-unified-process-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "ai-unified-process/marketplace"
+      }
+    }
+  },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "xhigh"
+    }
   }
 }

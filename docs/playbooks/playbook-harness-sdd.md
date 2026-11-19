@@ -1,5 +1,14 @@
 ﻿<!-- NO GOVERNING SPEC. Basis: operator request 2026-10-01 ("write this as a playbook-harness-sdd.md ... so I can get to this tomorrow morning and have sdd implemented for use with codex"). Row: .specs/file-manifest.md, docs/playbooks/. Promote to tasks.md before anything here is depended on. -->
 
+## Current disposition — 2026-11-18
+
+The pyecoregen decision-backlink pass is implemented in
+`scripts/annotate_generated.py`, specified in `sdd-deliverables-contract.md`,
+and verified against the recorded lending sample plus three isolated cases.
+This closes the deferred script item; the old deferred line below is retained
+as history. Tessl trial and CI enforcement remain deferred for their stated
+reasons.
+
 # Playbook: SDD on Codex CLI
 
 Source: this session, 2026-10-01
@@ -115,8 +124,9 @@ The chain now CONSUMES all inherited material, not just cites it:
 - pi-sdd-kit adopted as DELTAS only (idea/review/status/steering + handoff); wholesale
   install rejected (options analysis, decisions #36-39). Anioko = taxonomy source;
   book = study library (CC BY-NC-SA, internal only).
-- Deferred with reason: pyecoregen header-annotation script, Tessl codex-distribution
-  trial (scratch install), CI enforcement wiring (until playbook T5 lands).
+- Superseded by the Current disposition above: pyecoregen header-annotation
+  script is complete. Still deferred: Tessl codex-distribution trial (scratch
+  install), CI enforcement wiring (until playbook T5 lands).
 
 ## Decision gate wiring (V2-W2, 2026-11-07)
 

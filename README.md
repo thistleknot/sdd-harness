@@ -371,9 +371,14 @@ The **routing gate** decides mode automatically (Answer/Do/Spec). The `spec_gate
 
 ## Evaluation
 
+The [SATNA source review](specs/dispositions/satna-harness-reference-integration.md)
+maps eight external harness projects to the existing stack. The
+[full-harness eval spec](eval/SPEC-full-harness.md) defines a bounded paired
+pilot with independent acceptance checks.
+
 The harness hasn't been formally benchmarked yet. The self-review, test-gen, and change-review hooks are designed to catch incomplete work and regressions, but their lift hasn't been measured against a baseline (e.g., SWE-bench or controlled A/B on real tasks). This is a known gap.
 
-An env-var kill-switch (`HARNESS_HOOKS_ENABLED=0`) for A/B testing is planned but not yet implemented.
+The [hook comparison](eval/SPEC.md) uses `HARNESS_HOOKS_ENABLED=0` for its control arm.
 
 ## License
 

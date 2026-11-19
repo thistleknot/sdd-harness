@@ -1,6 +1,6 @@
 # Memory and harness integration
 
-CURRENT 2026-11-02: R27-R28 add Codex's native user-skill file projection alongside its shared MCP route. The common skill lifecycle stays canonical; installation, invocation and discovery checks follow each host. The separate memory evaluation OPEN list is unchanged.
+CURRENT 2026-11-18: R29 adds Claude PreCompact capture of transcript chunks into memory-index session records. Existing project and session authorization remains the read boundary; indexing errors do not block compaction. The separate memory evaluation OPEN list is unchanged.
 
 HISTORICAL STATUS: 2026-10-25 implementation and service-health details are preserved in [the dated archive](history/memory-and-harness-integration-2026-10-25.md).
 
@@ -39,6 +39,7 @@ HISTORICAL STATUS: 2026-10-25 implementation and service-health details are pres
 - R27: WHEN Codex is selected, the adapter MUST copy each selected canonical package additively to `$HOME/.agents/skills/<name>` and check every package resource at that destination. A shared retrieval index MUST NOT count as Codex's native skill installation.
 - R28: WHEN capability drift checks Codex skills, the declared projection MUST identify both native file copy and MCP route transports while using `$HOME/.agents/skills` as the skill destination. Router membership remains a separate shared-index check.
   - Given a valid canonical skill and `--client codex`, When apply completes, Then Codex's native skill files are present under `$HOME/.agents/skills/<name>` and its configured retrieval route remains independently checked.
+- R29: WHEN Claude PreCompact receives a readable `transcript_path`, workspace, and session ID, the hook MUST persist ordered transcript chunks as source-backed session records in the existing memory-index store; IF indexing fails, THEN the hook MUST preserve its payload backup and allow compaction to continue.
 - R12: ~/.skills MUST be the master; reconciliation MUST preserve divergent and unique legacy content before export, and skill synchronization MUST NOT load the full library into Claude natively.
 - R13: The runner MUST implement mine/run/verdict with dry execution by default, explicit model execution, call/token/time caps and resumable SQLite checkpoints.
 - R14: The evaluator MUST be hashed; held-out outputs MUST NOT reach proposer views; invalid or incomplete runs MUST be NOT TESTED.
@@ -70,6 +71,8 @@ scope keyword context, source metadata, open_memory, update_memory, retire_memor
 memory_feedback and legacy audit. Legacy repo/local arguments remain aliases.
 Reads requiring a project cannot silently fall back to global data. Existing raw
 conversation APIs remain available; public reads gain the same project guard.
+Claude PreCompact indexes transcript source chunks through `write_record`; the backup
+continues to store only the hook payload, and the hook remains fail-open if indexing fails.
 
 Use the existing WorkspaceIdentity and PromotionRouter contracts; add canonical
 project URI without introducing a competing identity registry. Keyword routing

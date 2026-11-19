@@ -1,5 +1,75 @@
 # Full-Harness Eval — Specs MCP Impact
 
+## Current — 2026-11-18
+
+Run a one-edit paired pilot before using this design to compare the ten-edit
+workflows. The pilot asks whether the same independent acceptance check can
+produce a valid result for both arms within the cap. The corrected pair finished
+in 454 seconds: specs-on exited 0 and failed 2 of 3 checks; specs-off exited 0
+and failed 1 of 3 checks (three attempts reached DEAD where four were required).
+Both acceptance verdicts are saved in the [pilot receipt](results/pilot-20261118T090000/pilot.json).
+This verifies the measurement path only; one paired task does not establish a
+harness quality effect or justify promotion to the ten-edit evaluation.
+
+The first run was discarded after config preflight showed both arms inherited
+the global Specs server. The 2026-11-18 corrected configs use the OpenCode V1
+remote-server schema and explicitly disable inherited tools outside each arm.
+The superseded status is preserved in
+[the dated pilot note](results/pilot-20261118T090000/superseded-2026-11-17-pilot-status.md).
+The ten-edit design below defines the workload. The pilot contract defines how
+to compare acceptance. See the
+[SATNA source review](../specs/dispositions/satna-harness-reference-integration.md).
+
+### Paired pilot requirements
+
+- P1. When a pilot is registered, the system shall freeze the task inputs, acceptance checks, model identity and resource limits.
+- P2. When a pilot is executed, the system shall apply the same evaluator-owned checks to each arm's snapshot.
+- P3. If a scheduled arm has no usable snapshot or its verifier cannot produce a verdict, then the system shall mark that observation as unscored.
+- P4. When an arm records its result, the system shall record process status separately from the acceptance verdict.
+- P5. When a paired pilot is reported, the system shall show elapsed time, reported usage and operator interventions alongside acceptance verdicts.
+- P6. If the paired run reaches its cap before recording both acceptance verdicts, then the system shall mark the pair inconclusive.
+
+### Pilot setup and acceptance
+
+- Before either arm runs, resolve each arm with `opencode debug config` and
+  `opencode mcp list`. Arm A must expose the declared shared servers and its
+  isolated Specs endpoint; Arm B must expose the shared servers with Specs
+  explicitly disabled. Disable inherited servers outside the arm contract.
+  If the resolved model, MCP set, or connection state differs from the frozen
+  setup, mark the pair inconclusive before prompting the model.
+- Use the OpenCode configuration schema accepted by the installed CLI. For
+  the current V1 CLI, remote servers use `type: remote`; a project entry must
+  fully replace a same-named global entry. Local test servers must use an
+  arm-scoped database so tool calls cannot alter the user's global records.
+- Use the first `taskq` edit and two isolated copies of the same seed. Freeze
+  the model revision, reasoning settings, agent version, prompt and check
+  digest before either arm runs. The compared treatment is the bundled Specs
+  MCP and steering change described below.
+- Give each arm four minutes and its verifier one minute. Reserve the remaining
+  two minutes of the 12-minute cap for setup and reporting. Apply the frozen
+  checks outside the agent's writable
+  workspace. For the first edit, check first-attempt success, success after a
+  transient failure, and exhaustion of the declared retry allowance.
+- Record the start revision, output snapshot, check digest, check result,
+  agent exit status and verifier output per arm. Record elapsed seconds,
+  provider-reported tokens or cost when available, and the count and kind of
+  operator interventions. Mark unavailable usage as unknown. An intervention
+  that changes an arm's inputs or state makes the pair incomparable.
+- Run `python eval/verify_pilot.py --snapshot <arm-root> --timeout-seconds 55`
+  against each immutable arm snapshot. The evaluator injects controlled
+  transient failures through a `Worker` subclass and checks first-attempt
+  success, recovery after one failure, and terminal `DEAD` after three
+  retries; the same assertions and timeout apply to both arms.
+- Given an agent exit of zero and a failed acceptance assertion, the
+  acceptance verdict is fail. Given the same exit and passing assertions, it
+  is pass. Given a missing snapshot or verifier timeout, it is unscored.
+- Given an absent or unimportable `taskq` package, the verifier shall report
+  unscored with the reason; given an imported package whose behavior violates
+  an assertion, it shall report fail with the failed check.
+- A complete pair demonstrates the measurement path. Use the
+  [existing matched-control and held-out gates](../docs/playbooks/memory-and-harness-integration.md#requirements)
+  to judge whether to promote an intervention.
+
 ## Objective
 
 Measure whether structured spec-tracking (via the specs MCP server) improves
@@ -15,12 +85,14 @@ regressions because the agent:
 - Records settled findings → avoids re-deriving decisions
 - Has a persistent plan → edits build on each other coherently
 
-**Arm B (specs-off)** relies on context window memory alone. Across 10 edits
-the agent will lose track of prior decisions, re-implement, and drift.
+**Arm B (specs-off)** has the shared tools listed below. The proposed effect
+is that the Specs MCP and steering bundle helps Arm A preserve prior decisions
+across the ten edits.
 
 **Falsification:** If Arm B's final requirement coverage and coherence score
-are within 0.05 of Arm A, the specs server adds overhead without measurable
-benefit.
+are within 0.05 of Arm A, the experiment shows no detectable quality lift
+for the Specs MCP and steering bundle on this workload. Use measured time,
+usage and interventions to assess overhead.
 
 ## Arms
 
@@ -61,13 +133,17 @@ Arm B gets no such steering. This simulates the "harness-aware" vs
 
 | Metric | How | Weight |
 |--------|-----|--------|
-| **Requirement coverage** | Parse specs.db requirements → check each criteria against code/tests | 0.25 |
-| **Test pass rate** | `pytest taskq/tests/ --tb=no -q` | 0.20 |
+| **Requirement coverage** | Pass fraction on the evaluator-owned acceptance checks common to both arms | 0.25 |
+| **Test pass rate** | `pytest taskq/tests/ --tb=no -q` in each arm, reported separately from requirement coverage | 0.20 |
 | **Dead code** | `vulture taskq/` | 0.15 |
 | **Duplication** | AST duplicate detection | 0.10 |
 | **Type errors** | `pyright taskq/` | 0.10 |
 | **Lint score** | `ruff check taskq/` | 0.10 |
-| **Plan completion** | tasks done/total in specs.db (Arm A only, informational for B) | 0.10 |
+| **Plan completion** | Tasks done/total in specs.db, Arm A only | Informational |
+
+Normalize the six shared metric weights by their sum (0.90) before computing
+the comparative composite. Keep arm-only Specs DB measurements in the spec
+quality report.
 
 ### Qualitative (post-run)
 

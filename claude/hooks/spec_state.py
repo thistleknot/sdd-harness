@@ -448,6 +448,16 @@ def cmd_approve(args: list[str]) -> int:
     if state is None:
         return die(f"state.json for '{feature}' is missing or corrupt.")
 
+    # --verbal "<operator words>" records the operator's spoken approval in the
+    # stamp itself; the artifact and EARS checks below still apply.
+    verbal = None
+    if "--verbal" in args:
+        i = args.index("--verbal")
+        verbal = " ".join(args[i + 1:]).strip()
+        if not verbal:
+            return die("--verbal needs the operator's words, e.g. --verbal \"approve\"")
+        args = args[:i]
+
     phase = args[0] if args and not args[0].startswith("--") else state.get("phase")
     if phase not in PHASES[:-1]:
         return die(f"'{phase}' is not an approvable phase. Choose one of: {', '.join(PHASES[:-1])}")
@@ -494,7 +504,7 @@ def cmd_approve(args: list[str]) -> int:
                 f"{shown}{more}"
             )
 
-    state.setdefault("approvals", {})[phase] = now()
+    state.setdefault("approvals", {})[phase] = f"{now()} verbal: {verbal}" if verbal else now()
     write_json(state_path(root, feature), state)
     print(f"Approved '{phase}' for spec '{feature}'.")
 

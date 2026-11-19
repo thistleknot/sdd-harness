@@ -346,14 +346,10 @@ def main() -> int:
     except Exception:
         return 0                          # a confused gate must not trap the session
 
+    # Advisory only (CLAUDE.md §8: approval is not a valid stop). The reason is
+    # reported on stderr; the tool call proceeds.
     if reason:
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }))
+        print(f"[spec-gate advisory] {reason}", file=sys.stderr)
     return 0
 
 

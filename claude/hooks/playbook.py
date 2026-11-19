@@ -399,6 +399,69 @@ agent type. The party's models live in ~/.harness/tiers.toml, never in this prom
     return 0
 
 
+FEATURE_REQUEST_RE = re.compile(r"^\s*(?:/feature\b|feature:)", re.IGNORECASE)
+
+
+def _is_subagent(payload: dict) -> bool:
+    return bool(payload.get("agent_id") or payload.get("agent_type"))
+
+
+def _in_worktree(cwd: str) -> bool:
+    return "/.worktrees/" in (cwd.replace("\\", "/").rstrip("/") + "/")
+
+
+def _project_root(cwd: str) -> str | None:
+    try:
+        p = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    out = p.stdout.strip()
+    if p.returncode != 0 or not out:
+        return None
+    return os.path.dirname(out.replace("\\", "/").rstrip("/"))
+
+
+def _feature_request(payload: dict) -> int:
+    prompt = payload.get("prompt") or ""
+    if not FEATURE_REQUEST_RE.search(prompt) or _is_subagent(payload):
+        return 0
+    cwd = payload.get("cwd") or os.getcwd()
+    if _in_worktree(cwd):
+        return 0
+    root = _project_root(cwd)
+    if root is None:
+        return 0
+    _emit("UserPromptSubmit", (
+        "FEATURE REQUEST for the agentic-kanban board (MCP server `agentic-kanban`; "
+        "call its tools by short name, whatever prefix the harness adds: create_feature, "
+        "add_story, claim_story, submit_story, get_review_packet, accept_story, "
+        "reject_story, cancel_story, list_stories, add_lesson). "
+        "Pass project_root = %s to every tool.\n\n"
+        "1. Call `create_feature`. Decompose the request into stories split by "
+        "independently reviewable behaviour, each with observable acceptance checks and "
+        "an explicit dependency list. A story owns its tests: never a separate "
+        "\"add tests\" or QA story. SHOW the user the full "
+        "story preview and STOP for their confirmation before any `add_story`.\n"
+        "2. After confirmation, `add_story` each. For each ready story: `claim_story`, "
+        "hand the work to a fresh `doer` subagent whose prompt names only the worktree "
+        "path and the story and never begins with `feature:`, run the acceptance checks, "
+        "then `submit_story` with the real output.\n"
+        "3. Review is done by a DIFFERENT session: a separate subagent calls "
+        "`get_review_packet`, then `accept_story` or `reject_story`. The implementer "
+        "never calls accept or reject. Use a distinct `session` label per role, such as "
+        "`doer-<story id>` and `reviewer-<story id>`.\n"
+        "4. Follow each reply's `next_action`.") % root)
+    return 0
+
+
+def _intake(payload: dict) -> int:
+    if FEATURE_REQUEST_RE.search(payload.get("prompt") or ""):
+        return _feature_request(payload)
+    return _architect_request(payload)
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -407,8 +470,10 @@ def main() -> int:
     try:
         if "--pivot" in sys.argv:
             return _pivot(payload)
+        if "--feature" in sys.argv:
+            return _feature_request(payload)
         if "--plan" in sys.argv or "--architect" in sys.argv:
-            return _architect_request(payload)
+            return _intake(payload)
         return _status(payload)
     except Exception:
         return 0                       # fail open: never trap a turn

@@ -12,7 +12,7 @@ Pipeline:
 |---|---|---|---|
 | LOAD | Read harness.json as the canonical server registry | [mandatory] | R1 |
 | LOAD_RULES | Render VS Code instruction text from the ordered rule registry when present | [mandatory] | Requirement #4 |
-| PROJECT | Render each registered server in the native client schema, including Hermes via its native writer | [mandatory] | R1, R2, R7 |
+| PROJECT | Render each registered server in the native client schema, including Hermes via its native writer | [mandatory] | R1, R2, R7, R16 |
 | CLEAN | Remove only the exact retired C: Graphify hook commands before projecting current hooks | [mandatory] | R8 |
 | WRITE | Merge through harness_write so backups and atomic writes apply | [mandatory] | R3 |
 | VERIFY | Native clients load their registered servers and unmanaged entries survive | [contract] | R4 |
@@ -35,6 +35,7 @@ R12: When Hermes projection runs, the system shall preserve unowned root setting
 R13: When a local server is projected to Hermes, the system shall allow the existing 240-second startup budget.
 R14: If Hermes validation, snapshot verification, or readback fails, then the system shall report failure without claiming completion.
 R15: WHEN the prompt rule registry exists, VS Code instruction generation MUST use its rendered shared document rather than reread the Markdown export as authority.
+R16: WHEN REA is present in the central MCP registry, the adapter MUST project its configured local launch command into each MCP-capable harness and OpenCode MUST discover its tools.
 CLOSED: A separate OpenAI-only registry is rejected because ~/.harness is the shared
 cross-harness source. Interactive `hermes mcp add` is rejected because it performs server
 discovery and prompts; Hermes' `_save_mcp_server` is the native non-interactive writer. Scalar-only

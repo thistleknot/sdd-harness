@@ -86,7 +86,6 @@ settings there is nobody above to escalate to, and the Leader keeps the problem.
 ## Operating policies
 
 - Max **4** subagents active. Queue rather than exceed.
-- Concurrent work in one checkout MUST have disjoint file ownership; overlapping edits are serialized or isolated in separate task worktrees.
 - Every subagent prompt states the **5-minute** default budget; higher budgets
   declared up front, else silence past budget = hung -> stop the task.
 - Handoffs are expensive; inline work needs no packet. When unavoidable, the

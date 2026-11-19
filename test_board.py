@@ -48,7 +48,7 @@ def mk(conn, key="K", n=1, deps=None, feature=None):
 
 def to_review(conn, sid, key="K", who="a"):
     board.claim_story(conn, key, sid, who, "br", "/wt")
-    board.submit_story(conn, key, sid, who, "ok")
+    board.submit_story(conn, key, sid, who, "ok", "a" * 40)
 
 
 def test_project_key(tmp_path):
@@ -93,17 +93,17 @@ def test_legal_paths(conn):
     sid = s["id"]
     assert s["status"] == "todo" and s["next_action"]
     board.claim_story(conn, "K", sid, "a", "br", "/wt")
-    board.submit_story(conn, "K", sid, "a", "pytest ok")
+    board.submit_story(conn, "K", sid, "a", "pytest ok", "b" * 40)
     d = board.accept_story(conn, "K", sid, "b")
     assert d["status"] == "done" and d["reviewer_session"] == "b" and d["assignee_session"] == "a"
 
     _, s2 = mk(conn, n=2)
     sid = s2["id"]
     board.claim_story(conn, "K", sid, "a", "br", "/wt")
-    board.submit_story(conn, "K", sid, "a", "out1")
+    board.submit_story(conn, "K", sid, "a", "out1", "b" * 40)
     r = board.reject_story(conn, "K", sid, "b", "fix it")
     assert r["status"] == "in-progress" and r["review_note"] == "fix it"
-    board.submit_story(conn, "K", sid, "a", "out2")
+    board.submit_story(conn, "K", sid, "a", "out2", "c" * 40)
     assert board.accept_story(conn, "K", sid, "b")["status"] == "done"
 
     _, s3 = mk(conn, n=3)
@@ -115,8 +115,8 @@ def test_illegal_transitions(conn):
     sid = s["id"]
     with pytest.raises(BoardError, match="claim"):
         board.accept_story(conn, "K", sid, "b")
-    with pytest.raises(BoardError, match="[Cc]laim"):
-        board.submit_story(conn, "K", sid, "a", "out")
+    with pytest.raises(BoardError, match="claim"):
+        board.submit_story(conn, "K", sid, "a", "out", "a" * 40)
     board.claim_story(conn, "K", sid, "a", "br", "/wt")
     with pytest.raises(BoardError, match="submit"):
         board.claim_story(conn, "K", sid, "a", "br", "/wt")
@@ -167,10 +167,10 @@ def test_review_gate(conn):
     board.claim_story(conn, "K", sid, "a", "br", "/wt")
     for bad in ("", "   ", "\n\t"):
         with pytest.raises(BoardError):
-            board.submit_story(conn, "K", sid, "a", bad)
+            board.submit_story(conn, "K", sid, "a", bad, "a" * 40)
     with pytest.raises(BoardError):
-        board.submit_story(conn, "K", sid, "other", "out")
-    board.submit_story(conn, "K", sid, "a", "out")
+        board.submit_story(conn, "K", sid, "other", "out", "a" * 40)
+    board.submit_story(conn, "K", sid, "a", "out", "a" * 40)
     with pytest.raises(BoardError):
         board.accept_story(conn, "K", sid, "a")
     with pytest.raises(BoardError):
@@ -179,7 +179,7 @@ def test_review_gate(conn):
         with pytest.raises(BoardError):
             board.reject_story(conn, "K", sid, "b", bad)
     assert board.reject_story(conn, "K", sid, "b", "why")["status"] == "in-progress"
-    board.submit_story(conn, "K", sid, "a", "out")
+    board.submit_story(conn, "K", sid, "a", "out", "b" * 40)
     assert board.accept_story(conn, "K", sid, "c")["status"] == "done"
 
 
@@ -191,7 +191,7 @@ def test_feature_status(conn):
     assert board.feature_status(conn, "K", fid) == "todo"
     board.claim_story(conn, "K", s1, "a", "b", "/w")
     assert board.feature_status(conn, "K", fid) == "in-progress"
-    board.submit_story(conn, "K", s1, "a", "o")
+    board.submit_story(conn, "K", s1, "a", "o", "b" * 40)
     assert board.feature_status(conn, "K", fid) == "in-progress"
     board.accept_story(conn, "K", s1, "b")
     board.cancel_story(conn, "K", s2, "a", "r")
@@ -207,7 +207,7 @@ def test_feature_status(conn):
     f3 = board.create_feature(conn, "K", "H", "r")["id"]
     u1 = board.add_story(conn, "K", f3, "u1", ["c"], [])["id"]
     board.claim_story(conn, "K", u1, "a", "b", "/w")
-    board.submit_story(conn, "K", u1, "a", "o")
+    board.submit_story(conn, "K", u1, "a", "o", "b" * 40)
     board.accept_story(conn, "K", u1, "b")
     assert board.feature_status(conn, "K", f3) == "done"
 

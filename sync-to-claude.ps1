@@ -1,3 +1,14 @@
+# Sync pipeline:
+# | Stage | Mechanism | Contract |
+# | ENUMERATE | Walk selected Claude subtree | [mandatory] R1 |
+# | FILTER | Exclude Python/build caches, Git metadata, and transient write locks | [mandatory] R1 |
+# | COPY | Transfer one file in the selected direction unless identical or held | [mandatory] R2 |
+# R1: When syncing a tree, the system shall skip generated cache, repository metadata, and transient lock files.
+# R2: If the destination is newer and smaller, then the system shall hold the copy to protect a reduction.
+# CLOSED: Mirroring/deletion is rejected because targeted copies preserve unrelated destination files.
+# Preconditions: Source and destination roots exist; Push and Pull are mutually exclusive.
+# Failure modes: Missing roots stop before writes; held reductions are reported and left untouched.
+
 # Sync the harness claude vault <-> the live ~/.claude tree.
 #
 # Merged from the old sync.ps1 (param surface, setup.py delegation, -Push) and
@@ -97,6 +108,9 @@ function Sync-Tree {
     Get-ChildItem $root -Recurse -File |
         Where-Object {
             $_.FullName -notmatch '\\__pycache__\\' -and
+            $_.FullName -notmatch '\\.pytest_cache\\' -and
+            $_.FullName -notmatch '\\.git\\' -and
+            $_.Name -ne '.git.turn_writes' -and
             $_.Extension -notin @('.pyc', '.pyo')
         } |
         ForEach-Object {

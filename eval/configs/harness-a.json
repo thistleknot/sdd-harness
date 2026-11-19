@@ -1,25 +1,40 @@
 {
-  "model": "openrouter/deepseek/deepseek-v4-flash",
+  "model": "litellm-local/party-leader",
   "mcp": {
     "retrieve-skills": {
-      "type": "streamable-http",
+      "type": "remote",
       "url": "http://127.0.0.1:8765/mcp",
       "enabled": true
     },
     "memory-index": {
-      "type": "streamable-http",
+      "type": "remote",
       "url": "http://127.0.0.1:8055/mcp",
       "enabled": true
     },
     "specs": {
-      "type": "streamable-http",
+      "type": "remote",
       "url": "http://127.0.0.1:8057/mcp",
       "enabled": true
     },
     "todo": {
       "type": "local",
-      "command": ["c:/users/user/py310/Scripts/python.exe", "C:/Users/user/.skills/todo/todo_mcp.py"],
+      "command": ["c:/users/user/py310/Scripts/python.exe", "C:/Users/user/.skills/todo/todo_mcp.py", "--stdio"],
       "enabled": true
+    },
+    "data-science-skills": {
+      "type": "local",
+      "command": ["F:/Python/mcp/data-science-skills/Scripts/python.exe", "C:/Users/user/.skills/parallel-rrf-graph-rag-hybrid-cascade-mmr-late-retriever/scripts/mcp_server.py"],
+      "enabled": false
+    },
+    "agentic-kanban": {
+      "type": "local",
+      "command": ["F:/Python/mcp/agentic-kanban/Scripts/python.exe", "C:/Users/user/.harness/board_mcp.py"],
+      "enabled": false
+    },
+    "graphify": {
+      "type": "local",
+      "command": ["F:/Python/uv-tools/bin/graphify-mcp.exe"],
+      "enabled": false
     }
   }
 }

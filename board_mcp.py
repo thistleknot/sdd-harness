@@ -1,28 +1,27 @@
-"""board_mcp.py — the agentic-kanban MCP server.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| REGISTER | Expose board operations as stdio FastMCP tools | [mandatory] | R1 |
+| CLAIM | Check transition, create worktree, then record assignment | [mandatory] | R2 |
+| SUBMIT | Verify worktree readiness and bind output to branch HEAD | [mandatory] | R3 |
+| REVIEW | Return packet only while current branch HEAD matches receipt | [mandatory] | R3 |
+| ACCEPT | Recheck receipt, merge verified branch, remove worktree, mark done | [mandatory] | R3 |
+| CANCEL | Check transition, remove worktree, then mark cancelled | [mandatory] | R2 |
 
-Spec: specs.db REQ #40 (story lifecycle), #41 (worktree lifecycle), #42 (independent review
-gate), #43 (server shape and project keying).
-Task: specs.db task #67; plan.md T4.
+Spec: specs.db REQ #40-#43; task #67.
 
-A stdio FastMCP server named ``agentic-kanban``. It sequences ``board.py`` (state) and
-``worktrees.py`` (git) and makes no LLM calls. Every tool takes ``project_root`` (any
-directory inside the repository, including a story's worktree) and ``session`` (the caller's
-identity). Every reply is a dict that includes ``next_action``.
+R1: Each tool shall take explicit project_root and caller session and return next_action.
+R2: A refused lifecycle action shall leave Git unchanged.
+R3: IF branch HEAD differs from its submitted receipt or receipt is legacy, THEN packet retrieval and acceptance shall refuse.
+CLOSED: Review packets do not include implementer conversation; verification evidence is the submitted output bound to a commit.
+Preconditions: project_root resolves inside a Git repository; board and worktree stores are available.
+Failure modes: board and worktree rule failures map to ToolError and preserve story state.
 
-Order of effects, so a refused action leaves git untouched:
-    claim   check_transition -> worktrees.create -> board.claim_story
-            (a failure after create removes the new worktree)
-    accept  check_transition -> worktrees.merge  -> worktrees.remove -> board.accept_story
-            (a merge conflict leaves the story in-review and raises ToolError)
-    cancel  check_transition -> worktrees.remove(delete_unmerged_branch=True)
-            -> board.cancel_story
-
-The database file is ``$AGENTIC_KANBAN_DB`` when set, else ``board.DEFAULT_DB``.
-Run with ``python board_mcp.py`` (stdio).
+This stdio server sequences board.py lifecycle state and worktrees.py Git operations without model calls.
 """
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -159,6 +158,11 @@ def claim_story(project_root: str, session: str, story_id: int) -> dict:
 def submit_story(project_root: str, session: str, story_id: int, verification_output: str) -> dict:
     """Submit an in-progress story for review with the output of its acceptance checks.
 
+    Require: caller owns the in-progress story and its worktree is ready for review.
+    Guarantee: the receipt stores verification output with the exact current worktree HEAD.
+    Maintain: a refused submission leaves story state unchanged.
+    Assert: no uncommitted or empty-diff revision is submitted.
+
     Refused (ToolError) when the story branch has no commits ahead of the default branch or
     its worktree has uncommitted changes, so a reviewer never gets an empty or partial diff
     (REQ #42, task #74).
@@ -166,7 +170,14 @@ def submit_story(project_root: str, session: str, story_id: int, verification_ou
     with _session(project_root) as (conn, key, repo):
         board.check_transition(conn, key, story_id, "submit", session)
         worktrees.check_ready_for_review(repo, board.get_story(conn, key, story_id)["slug"])
-        return board.submit_story(conn, key, story_id, session, verification_output)
+        verified_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=board.get_story(conn, key, story_id)["worktree_path"],
+            capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL,
+        ).stdout.strip()
+        if not verified_head:
+            raise ToolError("Cannot submit review without a committed branch revision.")
+        return board.submit_story(conn, key, story_id, session, verification_output, verified_head)
 
 
 @mcp.tool
@@ -175,8 +186,13 @@ def get_review_packet(project_root: str, session: str, story_id: int) -> dict:
     recorded verification output. Never the implementer's conversation.
 
     Returns:
-        ``{"story_id", "title", "acceptance_checks", "verification_output", "diff",
-        "next_action"}``.
+        ``{"story_id", "title", "acceptance_checks", "verification_output", "verified_head",
+        "submitted_at", "diff", "next_action"}``.
+
+    Require: story is in-review and has a revision-bound submitted receipt.
+    Guarantee: packet diff, check output and HEAD all describe the same branch revision.
+    Maintain: reviewer output excludes implementer conversation.
+    Assert: current branch HEAD equals the receipt before returning data.
 
     Raises:
         fastmcp.exceptions.ToolError: the story is not in-review.
@@ -188,15 +204,34 @@ def get_review_packet(project_root: str, session: str, story_id: int) -> dict:
                 f"Story {story_id} is {story['status']}, not in-review. {story['next_action']}"
             )
         row = conn.execute(
-            "SELECT detail FROM event WHERE story_id=? AND project_key=? AND kind='submitted' "
+            "SELECT at, detail FROM event WHERE story_id=? AND project_key=? AND kind='submitted' "
             "ORDER BY id DESC LIMIT 1",
             (story_id, key),
         ).fetchone()
+        if row is None:
+            raise ToolError("No verification receipt exists. Reject and resubmit the story.")
+        try:
+            receipt = json.loads(row["detail"])
+            verified_head = receipt["verified_head"]
+            verification_output = receipt["output"]
+        except (TypeError, ValueError, KeyError):
+            raise ToolError("Verification receipt has no revision identity. Reject and resubmit the story.")
+        branch_head = subprocess.run(
+            ["git", "-C", repo, "rev-parse", story["branch"]],
+            capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL,
+        ).stdout.strip()
+        if branch_head != verified_head:
+            raise ToolError(
+                f"Branch advanced after verification ({verified_head[:12]} -> {branch_head[:12]}). "
+                "Reject, update, and resubmit before review."
+            )
         return {
             "story_id": story_id,
             "title": story["title"],
             "acceptance_checks": story["acceptance_checks"],
-            "verification_output": row["detail"] if row else "",
+            "verification_output": verification_output,
+            "verified_head": verified_head,
+            "submitted_at": row["at"],
             "diff": worktrees.diff(repo, story["slug"]),
             "next_action": story["next_action"],
         }
@@ -206,13 +241,36 @@ def get_review_packet(project_root: str, session: str, story_id: int) -> dict:
 def accept_story(project_root: str, session: str, story_id: int) -> dict:
     """Accept an in-review story: merge its branch, remove its worktree, mark it done.
 
+    Require: caller is an independent reviewer and the branch HEAD matches its receipt.
+    Guarantee: only a revision with matching verification evidence is merged.
+    Maintain: a refused merge leaves the story in-review.
+    Assert: receipt and branch revision are checked before merge.
+
     Raises:
         fastmcp.exceptions.ToolError: the caller is the assignee, the story is not in-review,
-            or the merge conflicts (the story then stays in-review).
+            the verification receipt is missing/stale, or the merge conflicts (the story then stays in-review).
     """
     with _session(project_root) as (conn, key, repo):
         board.check_transition(conn, key, story_id, "accept", session)
         story = board.get_story(conn, key, story_id)
+        receipt_row = conn.execute(
+            "SELECT detail FROM event WHERE story_id=? AND project_key=? AND kind='submitted' "
+            "ORDER BY id DESC LIMIT 1",
+            (story_id, key),
+        ).fetchone()
+        try:
+            verified_head = json.loads(receipt_row["detail"])["verified_head"]
+        except (TypeError, ValueError, KeyError):
+            raise ToolError("No revision-bound verification receipt exists. Reject and resubmit the story.")
+        branch_head = subprocess.run(
+            ["git", "-C", repo, "rev-parse", story["branch"]],
+            capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL,
+        ).stdout.strip()
+        if branch_head != verified_head:
+            raise ToolError(
+                f"Branch advanced after verification ({verified_head[:12]} -> {branch_head[:12]}). "
+                "Refresh the packet and reject before accepting."
+            )
         worktrees.merge(repo, story["slug"], f"Merge story/{story['slug']}: {story['title']}")
         worktrees.remove(repo, story["slug"])
         return board.accept_story(conn, key, story_id, session)

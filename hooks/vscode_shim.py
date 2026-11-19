@@ -1,8 +1,17 @@
-"""hooks/vscode_shim.py -- run the Claude Code hooks from VS Code Copilot.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| LOAD | Read the configured Claude hook groups and VS Code event payload | [mandatory] | R1 |
+| TRANSLATE | Map VS Code tool names and payload keys to Claude hook form | [mandatory] | R1 |
+| FILTER | Reapply matchers and skip hooks requiring unavailable transcript sources | [mandatory] | R1-R2 |
+| RUN | Execute eligible hooks and fold decisions into the VS Code response | [mandatory] | R1 |
 
-Spec: no governing requirement. Basis: operator 2026-10-06 ("hooks and rules are
-core to this whole harness"). Task: specs store #63. Promote to a REQ before
-this is depended on.
+R1: WHEN a VS Code event is dispatched, the shim shall apply only eligible configured hooks and preserve fail-open behavior.
+R2: IF a hook requires the Claude transcript JSONL that VS Code does not write, THEN the shim shall skip that hook.
+CLOSED: Running PreCompact capture without its transcript source is rejected because it cannot create source-backed evidence.
+Preconditions: ~/.claude/settings.json holds the hooks; event payload arrives on stdin.
+Failure modes: shim errors exit successfully; hook errors remain visible in the folded response.
+
+hooks/vscode_shim.py runs compatible Claude Code hooks from VS Code Copilot.
 
 VS Code Local hooks send a Claude-shaped envelope (session_id, cwd, tool_name,
 tool_input, prompt, ...) but ignore matchers and name their tools differently
@@ -20,7 +29,7 @@ Require: ~/.claude/settings.json holds the hooks; payload JSON on stdin.
 Guarantee: every raw payload is appended to .tmp/vscode-hook-audit.jsonl first,
            so the tool-name map can be checked against what VS Code really sends.
 Maintain: fail open -- any shim error exits 0 rather than wedging the editor.
-Not ported: transcript-dependent hooks (SKIP) and SessionEnd (no VS Code event).
+Not ported: transcript-dependent hooks (SKIP), including PreCompact capture because VS Code does not write the source JSONL; SessionEnd has no VS Code event.
 """
 from __future__ import annotations
 
@@ -39,7 +48,7 @@ SETTINGS = Path.home() / ".claude" / "settings.json"
 AUDIT = Path(__file__).resolve().parent.parent / ".tmp" / "vscode-hook-audit.jsonl"
 
 # Read Claude's JSONL transcript, which VS Code does not write.
-SKIP = ("verify_gate.py", "session_handoff.py")
+SKIP = ("verify_gate.py", "session_handoff.py", "pre_compact.py")
 
 # VS Code tool name -> Claude tool name. UNVERIFIED against a live session:
 # the audit log is how this table gets corrected.

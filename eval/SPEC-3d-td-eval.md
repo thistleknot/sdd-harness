@@ -1,10 +1,26 @@
 # 3D Tower Defense — Harness Comparative Eval
 
+## Bounded six-arm rerun for Todo #4
+
+- When this rerun starts, the evaluator shall create six isolated Git roots with the same SDL2 seed and the existing per-harness gate-on or gate-off instructions.
+- When the evaluator dispatches an arm, it shall use the common `td-p1.md` workload with the CMake configure command adjusted for x64 MSVC already on PATH and the Ninja Multi-Config generator. The same prompt bytes shall reach all six arms.
+- When two gate conditions run on the same harness, the evaluator shall use the same model and client settings for both. The batch shall use native code tools and project instructions, with external tool servers and delegation disabled where the client supports it. Cross-harness comparisons shall identify any provider or model differences.
+- When OpenCode is used, the evaluator shall place `compaction.auto: false` in the arm-local `opencode.json` so the matched OpenCode arms share the same context behavior without changing user-level settings. The OpenCode probe shall be selectable by client and shall run alone before the full batch.
+- Before dispatch, the evaluator shall record the prompt hash, gate-instruction hash per arm, client versions, configured model, and tool or extension settings. Each arm shall have its own project root and client state directory.
+- When an arm instruction file is copied, the evaluator shall verify client discovery: Claude Code reads `CLAUDE.md`; Pi and OpenCode read `AGENTS.md`. If discovery cannot be evidenced, the affected comparison shall remain unscored.
+- When the batch runs, the evaluator shall reserve time for independent verification within a single 15-minute wall clock limit. When an arm reaches the generation cutoff, the evaluator shall stop the arm's process tree and distinguish a timeout from a completed response.
+- When generation ends, the evaluator shall count authored C or C++ source and header files and their physical lines, excluding build output, the SDL2 seed, and other vendored toolchains. It shall configure and build each available CMake project into a fresh directory, then test its executable for a live process and a visible window after five seconds.
+- If an arm produces no buildable project or the check cannot run, the evaluator shall record the reason per arm. When the rerun ends, the evaluator shall save a single comparison with model, project instruction variant, runner exit, build and launch results, file and line counts, and supporting logs. The first response per arm is the unit of this comparison.
+
+This bounded rerun scores the first response, independent CMake build, and five-second process/window launch only. It does not score pathfinding, combat, waves, win/loss, or the former 30-step progression protocol. Those broader gameplay results remain unverified.
+
+The sections below document the earlier 30-step protocol and its original client setup. Todo #4 used the bounded configuration and exact versions recorded in `eval/results/3d-td/comparison.md`; do not use the historical model/provider table below as the current run manifest.
+
 ## Objective
 
 Measure steps-to-working-game across 3 harnesses (pi, opencode, claude) on the same task: build a 3D tower defense game with a custom engine from scratch. No frameworks, no game engines. The harness that reaches the acceptance gate in fewer steps wins. Cap: 30 steps. If none reach it, lower the difficulty class.
 
-## Harnesses Under Test
+## Harnesses Under Test — earlier 30-step configuration
 
 | Harness | Provider | Model | Enforcement | Notes |
 |---------|----------|-------|-------------|-------|
@@ -84,6 +100,15 @@ Score = sum of (weight × (30 - step_at_tier) / 30) for each tier reached, minus
 4. Human NEVER provides implementation hints, architecture suggestions, or debugging help
 5. Each step is logged: timestamp, prompt given, files changed, compile result, gates checked
 6. Stop at 30 steps OR all 6 gates pass, whichever comes first
+
+### Batch runner contract
+
+- When `run_td_batch.ps1` launches OpenCode, it shall pass the complete prompt as one positional message argument; OpenCode does not consume this batch prompt from standard input.
+- When the batch runner waits for an arm, it shall allow up to 30 minutes before terminating that arm and record the timeout using the same duration.
+- When Claude Code or Pi is launched by the batch runner, the prompt shall remain on standard input.
+- Given a multi-line prompt containing quotes, when OpenCode is launched, then the received message shall preserve the prompt text as one argument.
+- When Pi routes an NVIDIA model alias through LiteLLM, Pi's model registry shall define that exact alias with reasoning disabled so it does not inherit incompatible metadata from another model.
+- Given a Pi NVIDIA request, when LiteLLM forwards it, then the request shall not contain the unsupported `enable_thinking` parameter.
 
 ## Initial Prompt (given verbatim to each harness)
 

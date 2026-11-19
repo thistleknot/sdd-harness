@@ -50,6 +50,24 @@ arbitrary project tests or prove that a report's semantic claims are true.
 Validation and verification reports must cite the actual checks run, and the
 host should supply authenticated command evidence when it can.
 
+## pyecoregen decision backlinks
+
+The sw-design generation stage runs the following after pyecoregen succeeds:
+
+```powershell
+python scripts/annotate_generated.py --ecore <model>.ecore --output <generated-dir>
+```
+
+The command reads decision IDs only from EAnnotations whose
+source is `decision` or begins `decision:`; requirement IDs and unrelated
+annotation details are not decision backlinks. Each generated Python file gets
+one leading `# GENERATED FROM <ecore-name> - DO NOT EDIT - decisions: <ids>`
+line, with IDs sorted and comma-separated. An empty decision set is rendered as
+`decisions: none`. Repeating the command replaces that marker instead of
+stacking headers. The command fails before writing when the Ecore input or
+output directory is missing, or when the output directory contains no Python
+files.
+
 ## Gate and resume behavior
 
 Initialize and inspect schema:

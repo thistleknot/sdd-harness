@@ -1,24 +1,20 @@
-"""board.py — SQLite store behind the agentic-kanban feature board.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| STORE | Persist project-keyed features, stories, dependencies and events in SQLite | [mandatory] | R1 |
+| TRANSITION | Enforce story lifecycle and dependency rules | [mandatory] | R1 |
+| SUBMIT | Store non-empty check output with exact verified branch HEAD in event.detail | [mandatory] | R2 |
+| REVIEW | Refuse acceptance when the current branch HEAD differs from its receipt | [contract] | R3 |
 
-Spec: specs.db REQ #40 (story lifecycle and dependency rule), REQ #43 (server shape and
-project keying).
-Task: specs.db task #65; plan.md T2. Plan import and render: REQ #45, task #72 (plan.md T4b).
+Spec: specs.db REQ #40, #43; task #65. Plan import/render: REQ #45, task #72.
 
-This module is the only writer of ``board.db``. It owns the state machine and the dependency
-rule and runs no git commands, no network and no LLM calls. Worktree side effects belong to
-``worktrees.py``; the MCP server (``board_mcp.py``) sequences the two.
+R1: Each operation shall read or write only rows matching its supplied project_key.
+R2: WHEN a story enters review, its receipt shall identify the exact checked commit.
+R3: IF the reviewed branch advances or the receipt is legacy, THEN packet retrieval and acceptance shall refuse until resubmission.
+CLOSED: A timestamp-only receipt is rejected because it cannot identify which code was checked.
+Preconditions: callers supply a valid project key and lifecycle action.
+Failure modes: invalid transitions, missing verification output, or missing commit identity raise BoardError.
 
-States: todo, in-progress, in-review, done, cancelled.
-Actions and the transition each performs:
-
-    claim   todo         -> in-progress   (every dependency must be done)
-    submit  in-progress  -> in-review     (verification output must be non-empty)
-    accept  in-review    -> done          (caller session != assigning session)
-    reject  in-review    -> in-progress   (caller session != assigning session; note required)
-    cancel  todo|in-progress|in-review -> cancelled   (not from done or cancelled)
-
-Every project's rows carry ``project_key``; no function reads or writes a row whose key
-differs from the one passed in.
+This module is the only writer of board.db; git effects belong to worktrees.py and are sequenced by board_mcp.py.
 """
 from __future__ import annotations
 
@@ -405,18 +401,27 @@ def claim_story(
 
 
 def submit_story(
-    conn: sqlite3.Connection, key: str, story_id: int, session: str, verification_output: str
+    conn: sqlite3.Connection, key: str, story_id: int, session: str,
+    verification_output: str, verified_head: str = "",
 ) -> dict:
-    """Move a story to in-review and append an event holding ``verification_output``.
+    """Move an in-progress story to review and bind its check result to a commit.
+
+    Require: non-empty verification output and commit identity.
+    Guarantee: submitted event detail contains both values as one receipt.
+    Maintain: state transitions still pass through _update and the project-key guard.
+    Assert: no receipt is created without a verified revision.
 
     Raises:
-        BoardError: ``verification_output`` is empty or whitespace.
+        BoardError: verification output or commit identity is empty.
     """
     if not verification_output or not verification_output.strip():
         raise BoardError("verification_output is empty; run the verify command and pass its output.")
+    if not verified_head or not verified_head.strip():
+        raise BoardError("verified_head is empty; bind verification to a committed branch revision.")
+    detail = json.dumps({"verified_head": verified_head.strip(), "output": verification_output})
     return _update(
         conn, key, story_id, "submit", session, {"status": "in-review"},
-        "submitted", verification_output,
+        "submitted", detail,
     )
 
 

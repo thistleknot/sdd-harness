@@ -1,0 +1,114 @@
+{
+  "run_id": "pilot-20261118T090000",
+  "status": "completed",
+  "disposition": "measurement path verified; no harness promotion decision",
+  "cap_seconds": 720,
+  "corrected_pair_wall_seconds": 454,
+  "corrected_pair_started": "2026-11-18T09:04:47-08:00",
+  "corrected_pair_completed": "2026-11-18T09:12:21-08:00",
+  "prompt": "Add a retry_count field to Task and make Worker retry failed tasks up to 3 times before marking them dead. Add a DEAD status to TaskStatus.",
+  "seed_taskq_sha256": "1387de912a50de137085f62744a7f963f6f1e0a9613ebff262e4c7473b942bf3",
+  "acceptance_verifier_sha256": "dbebe51315f47e499c2777474ce9177d2c2d217b681076f0f36eca8bbb92c094",
+  "model": {
+    "opencode_version": "1.19.5",
+    "requested_alias": "litellm-local/party-leader",
+    "resolved_model": "openai/qwen35-oc-4b-128k",
+    "resolved_ollama_tag": "qwen35-oc-4b-128k:latest",
+    "resolved_ollama_digest": "57efeed42219c2a8285533a3050ff6672932bcbfe4c710db85d462bd9d1ff124",
+    "reasoning_effort": "medium",
+    "opencode_global_config_sha256": "710e9cbd80e87cea745b5de5328220a36fb8c4bf03367a06e88622822c08efb",
+    "litellm_role_config_sha256": "df980a498ac74fd20bad7f3961929b1c582fe84c693c5b0964bc56442491c33d",
+    "other_loaded_ollama_tags": [
+      {
+        "name": "qwen35-oc-2b-128k:latest",
+        "digest": "88e41cbb2f1e1ece53511d35fc71551bbace51b2af7130917fd3c369ab24ff15"
+      }
+    ]
+  },
+  "mcp_preflight": {
+    "shared_connected": [
+      "retrieve-skills at http://127.0.0.1:8765/mcp",
+      "memory-index at http://127.0.0.1:8055/mcp",
+      "arm-scoped todo endpoint"
+    ],
+    "specs_on": "connected to isolated database at http://127.0.0.1:8058/mcp",
+    "specs_off": "explicitly disabled",
+    "unlisted_global_servers": "data-science-skills, agentic-kanban, and graphify disabled in both arms",
+    "todo_storage": "arm-local server copies use arm-local databases",
+    "preflight_evidence": "opencode debug config and opencode mcp list outputs showed the expected model and MCP set for each arm"
+  },
+  "arms": {
+    "specs_on": {
+      "artifact_directory": "specs-on-corrected",
+      "start_commit": "dfd961c14470eab875259aec520365f1ae19690e",
+      "final_commit": "dfd961c14470eab875259aec520365f1ae19690e",
+      "process_status": 0,
+      "elapsed_seconds": 114.4,
+      "acceptance_verdict": "fail",
+      "checks_passed": 1,
+      "checks_total": 3,
+      "failed_checks": [
+        "transient_failure_recovery",
+        "retry_exhaustion"
+      ],
+      "reported_usage": {
+        "total_tokens": 78553,
+        "input_tokens": 39331,
+        "cached_input_tokens": 38653,
+        "output_tokens": 458,
+        "reasoning_tokens": 111,
+        "cost": 0
+      },
+      "agent_tool_calls": {
+        "grep": 1
+      },
+      "operator_interventions": 0,
+      "agent_requested_write_permission": true,
+      "evaluation_file": "specs-on-corrected/evaluation.json",
+      "process_file": "specs-on-corrected/process.json",
+      "transcript_file": "specs-on-corrected/stdout.jsonl"
+    },
+    "specs_off": {
+      "artifact_directory": "specs-off-corrected",
+      "start_commit": "04b58ffff8bffb56be8e03dff28ae32bb7297939",
+      "final_commit": "4127d0460738a05832068a0dd52841d76e2ebbcc",
+      "process_status": 0,
+      "elapsed_seconds": 182.3,
+      "acceptance_verdict": "fail",
+      "checks_passed": 2,
+      "checks_total": 3,
+      "failed_checks": [
+        "retry_exhaustion"
+      ],
+      "reported_usage": {
+        "total_tokens": 486881,
+        "input_tokens": 41095,
+        "cached_input_tokens": 443588,
+        "output_tokens": 1693,
+        "reasoning_tokens": 505,
+        "cost": 0
+      },
+      "agent_tool_calls": {
+        "grep": 2,
+        "read": 2,
+        "edit": 3,
+        "bash": 5,
+        "todo_add_todo": 1
+      },
+      "operator_interventions": 0,
+      "agent_requested_write_permission": false,
+      "evaluation_file": "specs-off-corrected/evaluation.json",
+      "process_file": "specs-off-corrected/process.json",
+      "transcript_file": "specs-off-corrected/stdout.jsonl"
+    }
+  },
+  "superseded_attempt": {
+    "artifact_directories": [
+      "specs-on",
+      "specs-off"
+    ],
+    "disposition": "discarded; not used for comparison",
+    "reason": "OpenCode 1.19.5 ignored project MCP overrides using type streamable-http, so both arms inherited the global Specs server and other tools. Configs were corrected to V1 type remote and the resolved MCP sets were verified before the completed pair."
+  },
+  "interpretation": "The independent verifier produced a verdict for both arms within the cap. One paired task does not establish a harness quality effect or justify promotion to the ten-edit evaluation."
+}

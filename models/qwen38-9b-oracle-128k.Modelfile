@@ -1,0 +1,2 @@
+FROM hf.co/empero-ai/Qwen3.8-9B-Distill-GGUF:Qwen3.8-9B-Q6_K.gguf
+PARAMETER num_ctx 131072

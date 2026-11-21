@@ -1,4 +1,15 @@
-"""Tests for the party renderers in render_agents.py (claude, codex, opencode, pi, docs, CLI).
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| FIXTURE | Isolate Codex home, harness root, and representative config contents | [mandatory] | R1 |
+| PROJECT | Render each harness party into native artifacts | [mandatory] | R1 |
+| MIGRATE | Verify Codex profile files replace only the generated legacy marker block | [mandatory] | R9, REQ #118 |
+| VERIFY | Parse formats, preserve unmanaged settings, and confirm repeatability | [mandatory] | R1, R9 |
+
+R1: WHEN a party render test runs, filesystem writes MUST stay inside its temporary fixture.
+R9: WHEN Codex party roles render, tests MUST verify separate top-level profile files, safe legacy migration, and preservation of unmanaged profile/config values.
+R10: WHEN OpenCode Oracle role instructions render, tests MUST verify native inline-task compatibility and that packet files are not required unless the caller names that protocol.
+
+Tests for the party renderers in render_agents.py (claude, codex, opencode, pi, docs, CLI).
 
 Spec: C:/Users/user/.claude/plans/make-harness-render-and-install-the-party.md, sections 3-5.
 Real tiers.toml and the real agent bodies are read; every write goes to a tmp home/root.
@@ -122,36 +133,94 @@ def test_toml_multiline_round_trips_awkward_bodies(body):
     assert tomllib.loads("x = " + ra._toml_multiline(body))["x"] == body
 
 
-def test_codex_profile_block_keeps_an_existing_config_valid_and_is_idempotent(schema, home):
-    out = ra.render_party(schema, "codex", "openai")
-    block = next(a for a in out.artifacts if a.mode == "tomlblock")
-    existing = ('model = "gpt-5.4"\nmodel_reasoning_effort = "xhigh"\n\n[projects.\'C:\\Users\\user\\dev\']\n'
-                'trust_level = "trusted"\n\n[profiles.local]\nmodel = "q"\n')
-    ch = hw.compute(block, existing)
-    data = tomllib.loads(ch.after)
-    assert data["model_reasoning_effort"] == "xhigh" and data["profiles"]["local"] == {"model": "q"}
-    p = data["profiles"]["party_oracle_openai"]
-    assert p == {"model": "gpt-6.1-sol", "model_provider": "copilot-proxy", "model_reasoning_effort": "high"}
-    assert set(k for k in data["profiles"] if k.startswith("party_")) == {
-        "party_leader_openai", "party_reader_openai", "party_doer_openai", "party_oracle_openai"}
-    assert hw.compute(block, ch.after).status == "IDENTICAL"
+def test_codex_named_profile_files_use_flat_native_settings(schema, home):
+    """Codex roles must load through named profile files on current CLI releases.
+
+    Require: The canonical Codex party schema resolves the OpenAI provider roles.
+    Guarantee: Every party profile is a standalone top-level TOML artifact.
+    Maintain: Model, provider, and reasoning effort match the canonical role binding.
+    Assert: No generated [profiles.*] table remains in the base config output.
+    """
+    arts = by_name(ra.render_party(schema, "codex", "openai").artifacts)
+    profile = tomllib.loads(arts["party_oracle_openai.config.toml"].text)
+    assert profile == {
+        "model": "gpt-6.1-sol",
+        "model_provider": "copilot-proxy",
+        "model_reasoning_effort": "high",
+    }
+    assert not any(a.mode == "tomlblock" for a in arts.values())
 
 
-def test_codex_two_provider_templates_share_one_config_block(schema, home):
+@pytest.mark.parametrize("paired_begin_marker", [True, False])
+def test_codex_migrates_only_generated_profile_block_and_keeps_unmanaged_config(schema, home, paired_begin_marker):
+    """Legacy party profiles migrate while user configuration outside markers survives.
+
+    Require: The config contains valid local settings and one recognizable legacy party block.
+    Guarantee: Party tables become profile files and disappear from the base config.
+    Maintain: User profile tables, project trust, and unrelated keys remain unchanged.
+    Assert: A second render produces only identical artifacts.
+    """
+    config_path = home / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    party_start = f"{hw.TOML_BEGIN}\n" if paired_begin_marker else ""
+    config_path.write_text(
+        'model = "gpt-6-luna"\n\n[profiles.local]\nmodel = "local-model"\n\n'
+        + '[projects."W:\\\\models"]\ntrust_level = "trusted"\n\n'
+        + party_start
+        + '[profiles.party_reader_ollama]\nmodel = "old-reader"\nmodel_provider = "copilot-proxy"\n'
+        + '[profiles.party_legacy_ollama]\nmodel = "preserve-me"\nmodel_provider = "copilot-proxy"\n'
+        + f"{hw.TOML_END}\n",
+        encoding="utf-8",
+    )
+    out = ra.render_party(schema, "codex", "ollama")
+    changes = hw.plan(out.artifacts)
+    config_change = next(change for change in changes if change.artifact.path == config_path)
+    migrated = tomllib.loads(config_change.after)
+    assert migrated["profiles"]["local"] == {"model": "local-model"}
+    assert next(iter(migrated["projects"].values()))["trust_level"] == "trusted"
+    assert "party_reader_ollama" not in migrated.get("profiles", {})
+    profile_changes = {change.artifact.path.name: change.after for change in changes
+                       if change.artifact.path.name.endswith(".config.toml")}
+    assert tomllib.loads(profile_changes["party_reader_ollama.config.toml"])["model"] == "qwen3.5-oc:2b"
+    assert tomllib.loads(profile_changes["party_legacy_ollama.config.toml"])["model"] == "preserve-me"
+    hw.apply(changes, home / "backups")
+
+    repeated = hw.plan(ra.render_party(schema, "codex", "ollama").artifacts)
+    assert all(change.status == "IDENTICAL" for change in repeated)
+
+
+def test_codex_refuses_unmarked_legacy_profile_tables(schema, home):
+    """Unfenced profile tables stay untouched when the generated boundary is unknown.
+
+    Require: A matching generated table exists without either recognized start boundary.
+    Guarantee: Rendering fails before changing the config or producing a plan.
+    Maintain: Existing profile bytes remain exact.
+    Assert: The refusal identifies the missing boundary.
+    """
+    config_path = home / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    original = '[profiles.party_reader_ollama]\nmodel = "old-reader"\n'
+    config_path.write_text(original, encoding="utf-8")
+    with pytest.raises(ra.RenderError, match="generated profiles outside the owned block"):
+        ra.render_party(schema, "codex", "ollama")
+    assert config_path.read_text(encoding="utf-8") == original
+
+
+def test_codex_two_provider_templates_emit_separate_profile_files(schema, home):
     arts = ra.render_party(schema, "codex").artifacts
-    blocks = [a for a in arts if a.mode == "tomlblock"]
-    assert len(blocks) == 1
-    data = tomllib.loads(blocks[0].text)["profiles"]
-    assert "party_leader_openai" in data and "party_leader_ollama" in data
-    assert data["party_doer_ollama"]["model"] == "qwen3.5-oc:2b"
-    assert len([a for a in arts if a.mode == "file"]) == 6                       # 3 agents x 2 providers
+    profiles = {a.path.name: tomllib.loads(a.text) for a in arts if a.path.name.endswith(".config.toml")}
+    assert "party_leader_openai.config.toml" in profiles and "party_leader_ollama.config.toml" in profiles
+    assert profiles["party_reader_ollama.config.toml"]["model"] == "qwen3.5-oc:2b"
+    assert len(profiles) == 8                                                      # 4 roles x 2 providers
+    assert len([a for a in arts if a.path.name.endswith(".toml") and "config.toml" not in a.path.name]) == 6
 
 
 def test_codex_leader_keys_need_the_flag_and_a_single_provider(schema, home):
-    assert not any(a.mode == "tomlkeys" for a in ra.render_party(schema, "codex", "openai").artifacts)
+    assert not any(a.path.name == "config.toml" for a in ra.render_party(schema, "codex", "openai").artifacts)
     arts = ra.render_party(schema, "codex", "openai", leader=True).artifacts
-    keys = json.loads(next(a for a in arts if a.mode == "tomlkeys").text)
-    assert keys == {"model": '"gpt-5.4"', "model_reasoning_effort": '"medium"', "model_provider": '"copilot-proxy"'}
+    keys = tomllib.loads(next(a for a in arts if a.path.name == "config.toml").text)
+    assert {key: keys[key] for key in ("model", "model_reasoning_effort", "model_provider")} == {
+        "model": "gpt-5.4", "model_reasoning_effort": "medium", "model_provider": "copilot-proxy"}
     with pytest.raises(ra.RenderError, match="needs a single --provider"):
         ra.render_party(schema, "codex", leader=True)
 
@@ -229,6 +298,14 @@ def test_opencode_renders_both_provider_templates_as_separate_files(schema, home
     names = sorted(by_name(ra.render_party(schema, "opencode").artifacts))
     assert [n for n in names if n.endswith(".md")] == sorted(
         f"{r}-{p}.md" for p in ("openrouter", "ollama") for r in ("reader", "doer", "oracle"))
+
+
+def test_opencode_oracle_accepts_native_inline_task_handoff(schema, home):
+    out = ra.render_party(schema, "opencode", "openrouter")
+    oracle = by_name(out.artifacts)["oracle.md"].text
+    assert "OpenCode supplies the task inline and consumes your" in oracle
+    assert "Do not search for or require an `.agentpackets` file" in oracle
+    assert "names a packet-based protocol." in oracle
 
 
 # ---- pi --------------------------------------------------------------------------------

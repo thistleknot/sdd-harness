@@ -13,7 +13,10 @@ Pipeline:
 |---|---|---|---|
 | LOAD | Read harness.json as the canonical server registry | [mandatory] | R1 |
 | LOAD_RULES | Render VS Code instruction text from the ordered rule registry when present | [mandatory] | Requirement #4 |
-| PROJECT | Render each registered server in the native client schema, including Hermes via its native writer | [mandatory] | R1, R2, R7, R16 |
+| PROJECT | Render registered servers and the canonical SDD plugin in native client locations | [mandatory] | R1, R2, R7, R16, R33, R35 |
+| ROUTE | Start Headroom and route Codex and OpenCode model traffic through configured upstreams | [opt] | R27, R28, R32 |
+| FILTER | Project per-agent OpenCode tool patterns and MCP permissions | [opt] | R29, R36-R37 |
+| CAVEMAN | Project the pinned native plugin, mode skills, commands, and marked rules block | [opt] | R30 |
 | CLEAN | Remove only the exact retired C: Graphify hook commands before projecting current hooks | [mandatory] | R8 |
 | WRITE | Merge through harness_write so backups and atomic writes apply | [mandatory] | R3 |
 | VERIFY | Native clients load their registered servers and unmanaged entries survive | [contract] | R4 |
@@ -56,6 +59,18 @@ R23: IF a source fragment lacks explicit scope or stable order, THEN the adapter
 R24: WHERE a selected client has no dedicated native renderer, the adapter MUST report unsupported and MUST NOT route it through a shared view.
 R25: IF a mapped client has no eligible fragments, THEN the adapter MUST remove only its generated managed content after the standard baseline, backup, and readback checks.
 R26: WHEN a fragment names a known harness without a native renderer, the adapter MUST report and skip that destination while continuing supported audience members; unknown names remain errors.
+R27: WHEN Codex Headroom routing is enabled, the adapter MUST verify the configured upstream, route only the named provider through the local proxy, and preserve Codex model IDs, wire_api, supported credential settings, and all unrelated provider settings.
+R28: WHEN Codex sends a Responses API request through Headroom, the proxy MUST return the upstream response with the requested model ID unchanged.
+R29: WHEN per-agent OpenCode tool patterns are configured, the adapter MUST project only those patterns into the named agents, preserve other agent settings, and leave model bindings unchanged.
+R30: WHEN OpenCode Caveman integration is enabled, the adapter MUST project the pinned plugin payload, register its local plugin directory, merge its marked rules block, and preserve all unmanaged files and settings.
+R31: WHEN the selected Codex provider contains an empty unsupported `api_key`, the adapter MUST remove it; IF `api_key` is nonempty, THEN refuse routing without changing the file and direct the operator to supported `env_key` or `auth` settings.
+R32: When the selected Codex provider has no supported credential setting, the system shall set `requires_openai_auth` to false for that custom provider. If a supported credential setting exists, then the system shall preserve it and its authentication behavior.
+R33: When OpenCode sync applies, the system shall project the canonical SDD plugin and its declared helper files to the global plugin directory.
+R34: When an Oracle summary request runs, the system shall use the `opencode_context_proxy.upstream_url` from `harness.json` and preserve its configured role model ID.
+R35: When OpenCode sync applies, the system shall register the projected SDD plugin exactly once and preserve unrelated plugin entries.
+R36: When OpenCode agent permissions are configured, the system shall merge the configured entries into only the named agent's permission map.
+R37: If an OpenCode agent permission projection matches the target config, then the system shall skip the write.
+SUPERSEDED R34: Oracle summaries used the `opencode_context_proxy.upstream_url`; removed because the Leader summary hook blocked the native task before Oracle started. The OpenCode role request already uses its configured Headroom provider route.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
 """
@@ -70,8 +85,10 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import uuid4
 import yaml
@@ -97,6 +114,18 @@ OPENCODE_LOCAL_TIMEOUT_MS = 240000
 # OMO-slim was uninstalled 2026-11-08; it must never load from any opencode config.
 RETIRED_OPENCODE_PLUGINS = frozenset({"oh-my-opencode-slim"})
 MANAGED_OPENCODE_PLUGIN_CONFIG = "opencode_plugins"
+OPENCODE_CONTEXT_PROXY_CONFIG = "opencode_context_proxy"
+CODEX_CONTEXT_PROXY_CONFIG = "codex_context_proxy"
+OPENCODE_AGENT_TOOLS_CONFIG = "opencode_agent_tools"
+OPENCODE_AGENT_PERMISSIONS_CONFIG = "opencode_agent_permissions"
+OPENCODE_CAVEMAN_CONFIG = "opencode_caveman"
+OPENCODE_CAVEMAN_SOURCE = Path(__file__).parent / "integrations" / "caveman" / "opencode"
+OPENCODE_CAVEMAN_PLUGIN = "./plugins/caveman"
+OPENCODE_SDD_PLUGIN_SOURCE = Path(__file__).parent / "plugin" / ".opencode" / "plugins"
+OPENCODE_SDD_PLUGIN_FILE = "sdd-harness.js"
+OPENCODE_SDD_HELPER_FILE = "oracle-context.py"
+OPENCODE_CAVEMAN_RULE_BEGIN = "<!-- caveman-begin -->"
+OPENCODE_CAVEMAN_RULE_END = "<!-- caveman-end -->"
 HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
 BACKUP_RUN = Path.home() / '.harness/backups' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + uuid4().hex[:8])
 SKILL_COPY_TARGETS = {'claude': '.claude/skills', 'codex': '.agents/skills', 'copilot': '.copilot/skills',
@@ -339,7 +368,10 @@ def remove_retired_opencode_plugins() -> None:
         existing = harness_write.read_existing(path)
         if not existing:
             continue
-        data = harness_write.load_jsonc(existing)
+        try:
+            data = harness_write.load_jsonc(existing)
+        except harness_write.WriteError:
+            continue
         plugins = data.get("plugin")
         if not isinstance(plugins, list):
             continue
@@ -378,6 +410,14 @@ def sync_opencode(config: dict) -> None:
         print("  opencode: failed to parse config, skipping")
         return
 
+    caveman = config.get(OPENCODE_CAVEMAN_CONFIG, {})
+    caveman_enabled = isinstance(caveman, dict) and caveman.get("enabled") is True
+    caveman_changes = []
+    if caveman_enabled:
+        caveman_artifacts = _opencode_caveman_artifacts(Path.home() / ".config" / "opencode")
+        caveman_changes = harness_write.plan(caveman_artifacts)
+    sdd_plugin_changes = harness_write.plan(_opencode_sdd_plugin_artifacts(oc_json.parent))
+
     mcp = {}
     for name, srv in config["mcp_servers"].items():
         if srv["type"] == "http":
@@ -390,7 +430,30 @@ def sync_opencode(config: dict) -> None:
             mcp[name] = entry
 
     changed = write_server_projection(oc_json, "mcp", mcp, jsonc=True)
-    managed_plugins = config.get(MANAGED_OPENCODE_PLUGIN_CONFIG, [])
+    proxy = config.get(OPENCODE_CONTEXT_PROXY_CONFIG, {})
+    if proxy.get("enabled"):
+        _ensure_context_proxy(proxy)
+        text = oc_json.read_text(encoding="utf-8")
+        data = harness_write.load_jsonc(text)
+        providers = data.get("provider", {})
+        provider = providers.get(proxy["provider"], {}) if isinstance(providers, dict) else {}
+        options = provider.get("options", {}) if isinstance(provider, dict) else {}
+        if not isinstance(options, dict) or "baseURL" not in options:
+            raise harness_write.WriteError(
+                f"{oc_json}: provider {proxy['provider']!r} has no options.baseURL to route through Headroom"
+            )
+        if options["baseURL"] != proxy["proxy_url"]:
+            options["baseURL"] = proxy["proxy_url"]
+            artifact = harness_write.Artifact(
+                path=oc_json,
+                text=json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                mode="file",
+            )
+            changed = bool(harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN)) or changed
+    managed_plugins = [str(oc_json.parent / "plugins" / OPENCODE_SDD_PLUGIN_FILE)]
+    managed_plugins.extend(config.get(MANAGED_OPENCODE_PLUGIN_CONFIG, []))
+    if caveman_enabled:
+        managed_plugins.append(OPENCODE_CAVEMAN_PLUGIN)
     if managed_plugins:
         text = oc_json.read_text(encoding="utf-8")
         data = harness_write.load_jsonc(text)
@@ -406,7 +469,238 @@ def sync_opencode(config: dict) -> None:
                 mode="file",
             )
             changed = bool(harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN)) or changed
+    changed = bool(harness_write.apply(sdd_plugin_changes, BACKUP_RUN)) or changed
+    if caveman_enabled:
+        changed = bool(harness_write.apply(caveman_changes, BACKUP_RUN)) or changed
+    agent_tools = config.get(OPENCODE_AGENT_TOOLS_CONFIG, {})
+    agent_permissions = config.get(OPENCODE_AGENT_PERMISSIONS_CONFIG, {})
+    if agent_tools or agent_permissions:
+        changed = _project_opencode_agent_tools(oc_json, agent_tools, agent_permissions) or changed
     print(f"  opencode: {'updated' if changed else 'unchanged'} {oc_json} ({len(mcp)} servers)")
+
+
+def _opencode_sdd_plugin_artifacts(config_dir: Path) -> list:
+    """Build the canonical OpenCode SDD plugin and its Oracle outline helper.
+
+    Require: The canonical plugin source includes the JavaScript entrypoint and declared helper.
+    Guarantee: Returns exact file artifacts in the selected OpenCode plugin directory.
+    Maintain: No unrelated plugin files or registrations are removed.
+    Assert: Both owned source files exist before any destination write is planned.
+    """
+    import harness_write
+
+    artifacts = []
+    for filename in (OPENCODE_SDD_PLUGIN_FILE, OPENCODE_SDD_HELPER_FILE):
+        source = OPENCODE_SDD_PLUGIN_SOURCE / filename
+        if not source.is_file():
+            raise harness_write.WriteError(f"OpenCode SDD plugin source is missing: {source}")
+        artifacts.append(harness_write.Artifact(
+            path=config_dir / "plugins" / filename,
+            text=source.read_text(encoding="utf-8"),
+            mode="file",
+        ))
+    return artifacts
+
+
+def _opencode_caveman_artifacts(config_dir: Path) -> list:
+    """Build the pinned Caveman OpenCode files and preserved rules block.
+
+    Require: The vendored source has plugin, command, skill, and rule files.
+    Guarantee: Returns complete artifacts for every managed file and marked rules block.
+    Maintain: Unmanaged OpenCode files and text outside Caveman markers survive.
+    Assert: Source exists and marker counts are unambiguous before any writes occur.
+    """
+    import harness_write
+
+    source = OPENCODE_CAVEMAN_SOURCE
+    plugin_source = source / "plugins" / "caveman"
+    command_source = source / "commands"
+    skills_source = source / "skills"
+    rule_source = source / "AGENTS.md"
+    required = (plugin_source / "plugin.js", plugin_source / "server.js", plugin_source / "package.json",
+                plugin_source / "caveman-config.cjs", plugin_source / "caveman-parse.cjs", rule_source)
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise harness_write.WriteError(f"OpenCode Caveman source is incomplete: {', '.join(missing)}")
+
+    artifacts = []
+    for source_path in sorted(path for path in plugin_source.rglob("*") if path.is_file()):
+        relative = source_path.relative_to(plugin_source)
+        artifacts.append(harness_write.Artifact(
+            path=config_dir / "plugins" / "caveman" / relative,
+            text=source_path.read_text(encoding="utf-8"),
+            mode="file",
+        ))
+    for source_path in sorted(path for path in command_source.rglob("*") if path.is_file()):
+        relative = source_path.relative_to(command_source)
+        artifacts.append(harness_write.Artifact(
+            path=config_dir / "commands" / relative,
+            text=source_path.read_text(encoding="utf-8"),
+            mode="file",
+        ))
+    for mode in ("caveman", "ultracave", "megacave"):
+        mode_source = skills_source / mode / mode
+        if not mode_source.is_dir():
+            raise harness_write.WriteError(f"OpenCode Caveman mode skill is missing: {mode_source}")
+        for source_path in sorted(path for path in mode_source.rglob("*") if path.is_file()):
+            relative = source_path.relative_to(mode_source)
+            artifacts.append(harness_write.Artifact(
+                path=config_dir / "skills" / mode / relative,
+                text=source_path.read_text(encoding="utf-8"),
+                mode="file",
+            ))
+
+    agents_path = config_dir / "AGENTS.md"
+    existing = harness_write.read_existing(agents_path)
+    prior = existing or ""
+    if (prior.count(OPENCODE_CAVEMAN_RULE_BEGIN) > 1 or prior.count(OPENCODE_CAVEMAN_RULE_END) > 1):
+        raise harness_write.WriteError(f"{agents_path}: duplicate Caveman rule markers; refusing to guess")
+    rule_body = rule_source.read_text(encoding="utf-8").strip()
+    merged = harness_write.merge_block(prior, rule_body, OPENCODE_CAVEMAN_RULE_BEGIN, OPENCODE_CAVEMAN_RULE_END)
+    artifacts.append(harness_write.Artifact(path=agents_path, text=merged, mode="file"))
+    return artifacts
+
+
+def _project_opencode_agent_tools(path: Path, agent_tools: dict, agent_permissions: dict | None = None) -> bool:
+    """Merge configured tool visibility and permission rules into selected OpenCode agents.
+
+    Require: tool rules map strings to booleans; permission rules map strings to allow, deny, or ask.
+    Guarantee: each map is merged into only its named agent's native OpenCode object.
+    Maintain: prompts, model/provider bindings, unconfigured tools, and unconfigured permissions survive.
+    Assert: invalid maps, missing agents, or non-object native maps fail before the file is written.
+    """
+    import harness_write
+
+    text = path.read_text(encoding="utf-8")
+    data = harness_write.load_jsonc(text)
+    agents = data.get("agent")
+    if not isinstance(agents, dict):
+        raise harness_write.WriteError(f"{path}: expected an object at 'agent'")
+    changed = False
+    if not isinstance(agent_tools, dict) or not isinstance(agent_permissions or {}, dict):
+        raise harness_write.WriteError(f"{path}: OpenCode agent access maps must be objects")
+
+    for agent_name, patterns in agent_tools.items():
+        if not isinstance(patterns, dict) or any(
+            not isinstance(pattern, str) or not isinstance(enabled, bool)
+            for pattern, enabled in patterns.items()
+        ):
+            raise harness_write.WriteError(f"{path}: invalid tool pattern map for agent {agent_name!r}")
+        agent = agents.get(agent_name)
+        if not isinstance(agent, dict):
+            raise harness_write.WriteError(f"{path}: agent {agent_name!r} is missing")
+        existing = agent.get("tools", {})
+        if not isinstance(existing, dict):
+            raise harness_write.WriteError(f"{path}: agent {agent_name!r} tools must be an object")
+        merged = {**existing, **patterns}
+        if merged != existing:
+            agent["tools"] = merged
+            changed = True
+    for agent_name, rules in (agent_permissions or {}).items():
+        if not isinstance(rules, dict) or any(
+            not isinstance(pattern, str) or not isinstance(value, str) or value not in {"allow", "deny", "ask"}
+            for pattern, value in rules.items()
+        ):
+            raise harness_write.WriteError(f"{path}: invalid permission map for agent {agent_name!r}")
+        agent = agents.get(agent_name)
+        if not isinstance(agent, dict):
+            raise harness_write.WriteError(f"{path}: agent {agent_name!r} is missing")
+        existing_permissions = agent.get("permission", {})
+        if not isinstance(existing_permissions, dict):
+            raise harness_write.WriteError(f"{path}: agent {agent_name!r} permission must be an object")
+        merged_permissions = {**existing_permissions, **rules}
+        if merged_permissions != existing_permissions:
+            agent["permission"] = merged_permissions
+            changed = True
+    if not changed:
+        return False
+    artifact = harness_write.Artifact(
+        path=path,
+        text=json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        mode="file",
+    )
+    return bool(harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN))
+
+
+def _ensure_context_proxy(config: dict) -> None:
+    """Start Headroom with the configured upstream before routing a client through it.
+
+    Require: config names a local Headroom executable, upstream URL, and health URL.
+    Guarantee: a responsive proxy exists before a client route is changed to its URL.
+    Maintain: routed client model IDs, provider credentials, and wire protocols remain unchanged.
+    Assert: proxy health succeeds before configuration projection continues.
+    """
+    health_url = config["health_url"]
+    try:
+        with urlopen(health_url, timeout=2) as response:
+            health = json.load(response)
+        upstream = health.get("config", {}).get("openai_api_url")
+        if health.get("service") != "headroom-proxy" or not _same_proxy_endpoint(upstream, config["upstream_url"]):
+            raise RuntimeError(
+                f"Headroom at {health_url} has upstream {upstream!r}, expected {config['upstream_url']!r}"
+            )
+        return
+    except OSError:
+        pass
+
+    command = config["command"]
+    if not Path(command).is_file():
+        raise FileNotFoundError(f"Headroom executable not found: {command}")
+    log_path = Path(__file__).resolve().parent / ".tmp" / "headroom-context-proxy.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = log_path.open("ab")
+    startup = [command, "proxy", "--host", "127.0.0.1", "--port", str(config["port"]),
+               "--openai-api-url", config["upstream_url"], "--mode", config.get("mode", "cache"),
+               "--no-telemetry"]
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    child_env = os.environ.copy()
+    child_env["DO_NOT_TRACK"] = "1"
+    child_env["HEADROOM_TELEMETRY"] = "off"
+    subprocess.Popen(startup, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, env=child_env,
+                     creationflags=flags, start_new_session=os.name != "nt")
+    log.close()
+    deadline = datetime.now().timestamp() + 90
+    while datetime.now().timestamp() < deadline:
+        try:
+            with urlopen(health_url, timeout=2) as response:
+                health = json.load(response)
+            upstream = health.get("config", {}).get("openai_api_url")
+            if health.get("service") == "headroom-proxy" and _same_proxy_endpoint(upstream, config["upstream_url"]):
+                return
+            raise RuntimeError(
+                f"Headroom at {health_url} has upstream {upstream!r}, expected {config['upstream_url']!r}"
+            )
+        except OSError:
+            time.sleep(0.5)
+    raise RuntimeError(f"Headroom did not become healthy at {health_url}; see {log_path}")
+
+
+def _same_proxy_endpoint(left: str | None, right: str | None) -> bool:
+    """Compare proxy URLs while treating IPv4 loopback and localhost as aliases.
+
+    Require: both values are absolute HTTP URLs.
+    Guarantee: only host spelling aliases for the same loopback endpoint are normalized.
+    Maintain: scheme, port, path, query, and credentials still participate in equality.
+    Assert: malformed or relative URLs are not treated as matching endpoints.
+    """
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    lhs = urlsplit(left)
+    rhs = urlsplit(right)
+    if not lhs.scheme or not lhs.hostname or not rhs.scheme or not rhs.hostname:
+        return False
+    loopback = {"localhost", "127.0.0.1", "::1"}
+    lhs_host = "loopback" if lhs.hostname.casefold() in loopback else lhs.hostname.casefold()
+    rhs_host = "loopback" if rhs.hostname.casefold() in loopback else rhs.hostname.casefold()
+    return (
+        lhs.scheme.casefold() == rhs.scheme.casefold()
+        and lhs_host == rhs_host
+        and lhs.port == rhs.port
+        and lhs.path.rstrip("/") == rhs.path.rstrip("/")
+        and lhs.query == rhs.query
+        and lhs.username == rhs.username
+        and lhs.password == rhs.password
+    )
 
 
 def sync_kiro(config: dict) -> None:
@@ -527,8 +821,102 @@ def sync_codex(config: dict) -> None:
             )
 
     written = harness_write.apply(changes, BACKUP_RUN)
+    proxy = config.get(CODEX_CONTEXT_PROXY_CONFIG, {})
+    if proxy.get("enabled"):
+        _ensure_context_proxy(proxy)
+        written = _project_codex_provider_route(path, proxy) or written
     state = "updated" if written else "unchanged"
     print(f"  Codex: {state} {path} ({len(projected_servers(config, 'codex'))} servers)")
+
+
+def _project_codex_provider_route(path: Path, config: dict) -> bool:
+    """Update only Codex's configured provider base URL through the safe writer.
+
+    Require: `path` is a Codex TOML config and `config` names an existing provider, its
+        current upstream URL, and the local proxy URL.
+    Guarantee: only that provider's `base_url` changes, an empty unsupported `api_key` is
+        removed, and OpenAI account auth is disabled when the provider has no supported
+        credential; model IDs, supported credentials, wire API settings, comments, and unrelated
+        tables remain intact.
+    Maintain: repeat syncs accept either the declared upstream or already projected proxy URL.
+    Assert: TOML parses before and after projection; nonempty unsupported credentials and
+        unexpected provider drift refuse writes.
+    """
+    import re
+
+    import harness_write
+
+    text = path.read_text(encoding="utf-8")
+    parsed = tomllib.loads(text)
+    provider_name = config["provider"]
+    providers = parsed.get("model_providers", {})
+    provider = providers.get(provider_name) if isinstance(providers, dict) else None
+    if not isinstance(provider, dict):
+        raise harness_write.WriteError(f"{path}: provider {provider_name!r} is missing")
+    has_api_key = "api_key" in provider
+    if has_api_key and provider["api_key"] != "":
+        raise harness_write.WriteError(
+            f"{path}: provider {provider_name!r} has a nonempty unsupported api_key; "
+            "configure supported env_key or auth settings before routing"
+        )
+    supported_credentials = any(
+        provider.get(key) not in (None, "", {})
+        for key in ("env_key", "auth", "experimental_bearer_token")
+    )
+    current_url = provider.get("base_url")
+    proxy_url = config["proxy_url"]
+    upstream_url = config["upstream_url"]
+    already_routed = current_url == proxy_url
+    if not already_routed and not _same_proxy_endpoint(current_url, upstream_url):
+        raise harness_write.WriteError(
+            f"{path}: provider {provider_name!r} base_url drifted to {current_url!r}; "
+            f"expected {upstream_url!r} before proxy projection"
+        )
+
+    lines = text.splitlines(keepends=True)
+    header = f"[model_providers.{provider_name}]"
+    start = next((index for index, line in enumerate(lines) if line.strip() == header), None)
+    if start is None:
+        raise harness_write.WriteError(f"{path}: table {header} is missing")
+    end = next((index for index in range(start + 1, len(lines))
+                if re.match(r"^\s*\[[^\[]", lines[index])), len(lines))
+    key_pattern = re.compile(r"^(\s*base_url\s*=\s*)(?:\"(?:\\.|[^\"])*\"|'[^']*')(\s*(?:#.*)?)(\r?\n)?$")
+    empty_api_key_pattern = re.compile(r"^(\s*)api_key\s*=\s*(['\"])(\2)(\s*(?:#.*)?)(\r?\n)?$")
+    auth_mode_pattern = re.compile(r"^(\s*requires_openai_auth\s*=\s*)(true|false)(\s*(?:#.*)?)(\r?\n)?$", re.I)
+    changed = False
+    for index in range(start + 1, end):
+        match = key_pattern.match(lines[index])
+        if match and not already_routed:
+            newline = match.group(3) or ""
+            lines[index] = f"{match.group(1)}{json.dumps(proxy_url)}{match.group(2)}{newline}"
+            changed = True
+            continue
+        match = empty_api_key_pattern.match(lines[index])
+        if match:
+            comment = match.group(4).strip()
+            newline = match.group(5) or ""
+            lines[index] = f"{match.group(1)}{comment}{newline}" if comment else ""
+            changed = True
+            continue
+        match = auth_mode_pattern.match(lines[index])
+        if match and not supported_credentials and match.group(2).lower() != "false":
+            newline = match.group(4) or ""
+            lines[index] = f"{match.group(1)}false{match.group(3)}{newline}"
+            changed = True
+    if not any(key_pattern.match(lines[index]) for index in range(start + 1, end)):
+        raise harness_write.WriteError(f"{path}: table {header} has no base_url assignment")
+    has_auth_mode = any(auth_mode_pattern.match(lines[index]) for index in range(start + 1, end))
+    if not supported_credentials and not has_auth_mode:
+        if end and not lines[end - 1].endswith(("\n", "\r")):
+            lines[end - 1] += "\n"
+        lines.insert(end, "requires_openai_auth = false\n")
+        changed = True
+    if not changed:
+        return False
+    projected = "".join(lines)
+    tomllib.loads(projected)
+    artifact = harness_write.Artifact(path=path, text=projected, mode="file")
+    return bool(harness_write.apply(harness_write.plan([artifact]), BACKUP_RUN))
 
 
 CODEX_FEATURE_COMMAND = ("c:/users/user/py310/Scripts/python.exe "

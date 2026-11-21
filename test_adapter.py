@@ -2,6 +2,9 @@
 |---|---|---|---|
 | FIXTURE | Build temporary harness homes and representative MCP configs | [mandatory] | R1 |
 | PROJECT | Invoke each harness adapter against its temporary destinations | [mandatory] | R1 |
+| ROUTE | Check Codex proxy projection preserves provider roles, protocol, and auth mode | [mandatory] | R7, R10 |
+| PLUGIN | Check OpenCode projects and registers its canonical SDD plugin and direct Oracle handoff | [mandatory] | R11-R13 |
+| FILTER | Check per-agent tool patterns, MCP permissions, and role settings survive OpenCode projection | [mandatory] | R8, R14 |
 | VERIFY | Check native formats, registry-backed prompt text, Hermes writer payload, and preserved files | [mandatory] | R2, R3, R5, R6 |
 
 R1: When a sync test runs, its fixtures MUST isolate writes from live config.
@@ -12,6 +15,14 @@ R4: When a local MCP is projected to OpenCode, the test MUST assert the configur
 tool-fetch timeout covers the measured cold start.
 R5: When a retired Graphify hook is removed, every unrelated hook and setting MUST survive.
 R6: When the instruction registry exists, VS Code prompt content MUST equal its rendered shared document.
+R7: When Codex Headroom routing is enabled, tests MUST verify the selected provider URL changes while model IDs, credentials, wire_api, and unmanaged settings survive.
+R8: When OpenCode agent tool patterns are projected, tests MUST verify only the selected agent changes and the write is repeatable.
+R9: When Codex routing sees an empty ignored api_key, tests MUST confirm its removal; nonempty unsupported credentials MUST refuse writes.
+R10: When Codex's custom provider has no supported credential, the system shall project `requires_openai_auth = false`. If it has a supported credential, then the system shall preserve its authentication setting.
+R11: When OpenCode sync applies, the system shall project the canonical SDD plugin and its helper files.
+R12: When an Oracle task is prepared, the generated plugin shall preserve the original task and evidence without a pre-dispatch model request.
+R13: When OpenCode sync applies, the system shall register the projected SDD plugin once and preserve unrelated registered plugins.
+R14: When OpenCode sync applies, the Oracle role shall receive only the configured skill-retrieval MCP permissions, with other role permissions unchanged and repeat sync idempotent.
 
 CLOSED: Pinning the literal '# Operating Core' title was rejected because the
 operator's updated canonical prompt uses '# Operating Contract'.
@@ -27,17 +38,21 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import harness_write
 
 from adapter import (
     HARNESS_AGENTS,
     HARNESS_RULES_DB,
     _harness_agents_text,
+    _project_opencode_agent_tools,
     ensure_global_hooks,
     load_harness,
     remove_retired_graphify_hooks,
     sync_claude_code,
     sync_codex,
     sync_codex_hooks,
+    _project_codex_provider_route,
+    tomllib,
     sync_github_copilot,
     sync_kiro,
     sync_opencode,
@@ -111,7 +126,35 @@ def test_sync_opencode_uses_native_remote_and_local_schema(config, tmp_path):
     assert data["mcp"]["todo"]["command"] == ["python", "todo_mcp.py"]
     assert data["mcp"]["todo"]["timeout"] == 240000
     assert data["mcp"]["todo"]["environment"] == {"PYTHONUTF8": "1"}
-    assert data["plugin"] == ["@tarquinen/opencode-dcp@latest"]
+    assert data["plugin"] == [
+        str(oc_dir / "plugins" / "sdd-harness.js"),
+        "@tarquinen/opencode-dcp@latest",
+    ]
+
+
+def test_sync_opencode_projects_the_canonical_sdd_plugin_and_helper(config, tmp_path):
+    oc_dir = tmp_path / ".config" / "opencode"
+    oc_dir.mkdir(parents=True)
+    oc_json = oc_dir / "opencode.json"
+    oc_json.write_text(json.dumps({"plugin": ["operator-plugin"]}), encoding="utf-8")
+    backup_root = tmp_path / "backups"
+    with patch("adapter.Path.home", return_value=tmp_path), patch("adapter.BACKUP_RUN", backup_root):
+        sync_opencode(config)
+        plugin_path = oc_dir / "plugins" / "sdd-harness.js"
+        helper_path = oc_dir / "plugins" / "oracle-context.py"
+        plugin_text = plugin_path.read_text(encoding="utf-8")
+        assert plugin_text == (Path(__file__).parent / "plugin" / ".opencode" / "plugins" / "sdd-harness.js").read_text(encoding="utf-8")
+        assert helper_path.read_bytes() == (Path(__file__).parent / "plugin" / ".opencode" / "plugins" / "oracle-context.py").read_bytes()
+        assert "Original Leader task" in plugin_text
+        assert "Recent Leader evidence" in plugin_text
+        assert "summarizeForOracle" not in plugin_text
+        assert "oracleSummaryEndpoint" not in plugin_text
+        assert "44017" not in plugin_text
+        projected = json.loads(oc_json.read_text(encoding="utf-8"))
+        assert projected["plugin"] == ["operator-plugin", str(plugin_path)]
+        first_hashes = (plugin_path.read_bytes(), helper_path.read_bytes(), oc_json.read_bytes())
+        sync_opencode(config)
+        assert (plugin_path.read_bytes(), helper_path.read_bytes(), oc_json.read_bytes()) == first_hashes
 
 
 def test_sync_opencode_reads_block_comments_trailing_commas_and_keeps_other_keys(config, tmp_path):
@@ -136,6 +179,86 @@ def test_sync_opencode_skips_an_unparseable_config_without_touching_it(config, t
     with patch("adapter.Path.home", return_value=tmp_path):
         sync_opencode(config)
     assert oc_json.read_bytes() == b"{ not json" and "failed to parse config" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("agent_name", "model", "pattern"),
+    [
+        ("orchestrator", "litellm/party-leader", "rea*"),
+        ("reader", "litellm/party-scout", "graphify*"),
+        ("oracle", "litellm/party-oracle", "data-science-skills*"),
+    ],
+)
+def test_opencode_agent_tool_projection_preserves_role_and_unmanaged_config(
+    agent_name, model, pattern, tmp_path
+):
+    oc_json = tmp_path / "opencode.json"
+    oc_json.write_text(
+        json.dumps({
+            "agent": {
+                agent_name: {"model": model, "prompt": "Keep this prompt", "tools": {"read": True}},
+                "unselected": {"model": "litellm/party-fighter", "tools": {"edit": True}},
+            },
+            "provider": {"litellm": {"baseURL": "http://127.0.0.1:8789/v1"}},
+        }),
+        encoding="utf-8",
+    )
+    rules = {agent_name: {pattern: False}}
+
+    assert _project_opencode_agent_tools(oc_json, rules)
+    before = oc_json.read_bytes()
+    data = json.loads(before)
+    assert data["agent"][agent_name]["model"] == model
+    assert data["agent"][agent_name]["prompt"] == "Keep this prompt"
+    assert data["agent"][agent_name]["tools"] == {"read": True, pattern: False}
+    assert data["agent"]["unselected"] == {"model": "litellm/party-fighter", "tools": {"edit": True}}
+    assert data["provider"]["litellm"]["baseURL"] == "http://127.0.0.1:8789/v1"
+    assert not _project_opencode_agent_tools(oc_json, rules)
+    assert oc_json.read_bytes() == before
+
+
+def test_opencode_agent_permission_projection_adds_only_named_mcp_access(tmp_path):
+    oc_json = tmp_path / "opencode.json"
+    oc_json.write_text(
+        json.dumps({
+            "agent": {
+                "oracle": {
+                    "model": "litellm/party-oracle",
+                    "permission": {"*": "deny", "read": "allow", "task": "deny"},
+                    "tools": {"read": True},
+                },
+                "orchestrator": {
+                    "model": "litellm/party-leader",
+                    "permission": {"task": {"*": "deny", "oracle": "allow"}},
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    permissions = {
+        "oracle": {
+            "retrieve-skills_retrieve_skills": "allow",
+            "retrieve-skills_read_skill": "allow",
+        },
+    }
+
+    assert _project_opencode_agent_tools(oc_json, {}, permissions)
+    before = oc_json.read_bytes()
+    data = json.loads(before)
+    assert data["agent"]["oracle"]["permission"] == {
+        "*": "deny",
+        "read": "allow",
+        "task": "deny",
+        "retrieve-skills_retrieve_skills": "allow",
+        "retrieve-skills_read_skill": "allow",
+    }
+    assert data["agent"]["oracle"]["tools"] == {"read": True}
+    assert data["agent"]["oracle"]["model"] == "litellm/party-oracle"
+    assert data["agent"]["orchestrator"]["permission"] == {
+        "task": {"*": "deny", "oracle": "allow"},
+    }
+    assert not _project_opencode_agent_tools(oc_json, {}, permissions)
+    assert oc_json.read_bytes() == before
 
 
 REA_TABLE = (
@@ -206,6 +329,96 @@ def test_sync_codex_result_parses_as_toml(config, tmp_path):
     assert data["mcp_servers"]["rea"]["startup_timeout_sec"] == 30
     assert data["mcp_servers"]["retrieve-skills"]["url"] == "http://127.0.0.1:8765/mcp"
     assert data["mcp_servers"]["todo"]["env"] == {"PYTHONUTF8": "1"}
+
+
+@pytest.mark.parametrize(
+    ("model_id", "configured_url"),
+    [
+        ("gpt-5.4", "http://127.0.0.1:4000/v1"),
+        ("gpt-5.4-mini", "http://localhost:4000/v1"),
+        ("qwopus-coding-thinking-256k:9b", "http://127.0.0.1:4000/v1"),
+    ],
+)
+def test_codex_context_route_preserves_role_and_provider_settings(model_id, configured_url, tmp_path):
+    cfg = tmp_path / ".codex" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(
+        f'model = "{model_id}"\nmodel_provider = "copilot-proxy"\n\n'
+        '[model_providers.copilot-proxy]\n'
+        'name = "copilot-proxy"\n'
+        f'base_url = "{configured_url}" # shared local gateway\n'
+        'wire_api = "responses"\n'
+        'env_key = "CODEX_GATEWAY_API_KEY"\n'
+        '\n[profiles.party_oracle_openai]\n'
+        'model = "gpt-6.1-sol"\nmodel_provider = "copilot-proxy"\n',
+        encoding="utf-8",
+    )
+    proxy = {
+        "provider": "copilot-proxy",
+        "upstream_url": "http://127.0.0.1:4000/v1",
+        "proxy_url": "http://127.0.0.1:8789/v1",
+    }
+
+    assert _project_codex_provider_route(cfg, proxy)
+    text = cfg.read_text(encoding="utf-8")
+    projected = tomllib.loads(text)
+    assert projected["model"] == model_id
+    assert projected["model_provider"] == "copilot-proxy"
+    assert projected["model_providers"]["copilot-proxy"]["base_url"] == proxy["proxy_url"]
+    assert projected["model_providers"]["copilot-proxy"]["wire_api"] == "responses"
+    assert projected["model_providers"]["copilot-proxy"]["env_key"] == "CODEX_GATEWAY_API_KEY"
+    assert projected["profiles"]["party_oracle_openai"]["model"] == "gpt-6.1-sol"
+    assert "# shared local gateway" in text
+    assert not _project_codex_provider_route(cfg, proxy)
+
+
+def test_codex_route_removes_empty_ignored_api_key_and_keeps_comment(tmp_path):
+    cfg = tmp_path / ".codex" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(
+        '[model_providers.copilot-proxy]\n'
+        'base_url = "http://127.0.0.1:4000/v1"\n'
+        'wire_api = "responses"\n'
+        'api_key = "" # no credential configured\n',
+        encoding="utf-8",
+    )
+    proxy = {
+        "provider": "copilot-proxy",
+        "upstream_url": "http://127.0.0.1:4000/v1",
+        "proxy_url": "http://127.0.0.1:8789/v1",
+    }
+
+    assert _project_codex_provider_route(cfg, proxy)
+    text = cfg.read_text(encoding="utf-8")
+    provider = tomllib.loads(text)["model_providers"]["copilot-proxy"]
+    assert provider == {
+        "base_url": proxy["proxy_url"],
+        "wire_api": "responses",
+        "requires_openai_auth": False,
+    }
+    assert "# no credential configured" in text
+    assert not _project_codex_provider_route(cfg, proxy)
+
+
+def test_codex_route_refuses_nonempty_unsupported_api_key_without_writing(tmp_path):
+    cfg = tmp_path / ".codex" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    original = (
+        '[model_providers.copilot-proxy]\n'
+        'base_url = "http://127.0.0.1:4000/v1"\n'
+        'wire_api = "responses"\n'
+        'api_key = "secret"\n'
+    )
+    cfg.write_text(original, encoding="utf-8")
+    proxy = {
+        "provider": "copilot-proxy",
+        "upstream_url": "http://127.0.0.1:4000/v1",
+        "proxy_url": "http://127.0.0.1:8789/v1",
+    }
+
+    with pytest.raises(harness_write.WriteError, match="nonempty unsupported api_key"):
+        _project_codex_provider_route(cfg, proxy)
+    assert cfg.read_text(encoding="utf-8") == original
 
 
 def _hooks_sync(config, tmp_path, existing=None):

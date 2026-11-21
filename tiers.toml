@@ -100,8 +100,8 @@ name      = "doer"
 tier      = "L3"
 reasoning = "high"
 ceiling   = "high"
-gate      = "escalate"      # Oracle: the Leader's last resort for hard problems; returns a better spec, never code bodies
-tools     = ["Read", "Bash", "Grep", "Glob", "Write"]
+gate      = "escalate"      # Oracle returns an evidence-backed plan to Leader; Leader owns artifacts and Fighter dispatch
+tools     = ["Read", "Grep", "Glob"]
 name      = "oracle"
 
 # ---------------------------------------------------------------- providers
@@ -156,20 +156,20 @@ heavy = ["z-ai/glm-5.3", "deepseek/deepseek-v4.1-flash-1017"]   # solo pin: upgr
 # Ollama: local models only. Largest usable is 9B, so there is no distinct heavy model:
 # heavy = the mid model at high effort (the same trick as the anthropic binding).
 [binding.ollama]
-L0       = "qwen3.5-oc:2b"
-L1       = "qwopus-coding-thinking-256k:9b"
-L2       = "qwopus-coding-thinking-256k:9b"
-L3       = "qwopus-coding-thinking-256k:9b"
-resolved = "2026-10-08"
+L0       = "qwen35-oc-2b-128k:latest"
+L1       = "qwen35-oc-4b-128k:latest"
+L2       = "qwen35-oc-4b-128k:latest"
+L3       = "qwen38-9b-oracle:128k"
+resolved = "2026-11-20"
 effort_key = "reasoning_effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
 dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L3", "high"]]
-note     = "L0 and L1 ids are present in ALL FOUR registries (ollama list, the localhost:4000 proxy, pi models.json, opencode.json), checked 2026-10-08; qwen3.5-oc:4b is not in pi or the proxy. Which of these is actually the best light/mid brain is unmeasured. Whether a given harness can express effort for an Ollama model is a per-harness question (pi: thinking field; opencode: no variant mapping known)."
+note     = "OPERATOR 2026-11-20: local role roster is Scout=L0 Qwen3.5 2B low, Leader/Fighter=L1 Qwen3.5 4B medium/low, Oracle=L3 Qwen3.8 9B Opus distill Q6_K high (OpenCode requests xhigh). Oracle uses qwen38-9b-oracle:128k with num_ctx 131072; its OpenCode output cap is 768. Oracle is read-only and returns plans to Leader; Leader owns Fighter dispatch. OpenCode's route, permission, and output contracts are in ~/.config/opencode/litellm-routing.spec.md. Output caps do not establish effort execution. Supersedes the 2026-11-19 Qwen3.8 27B Oracle route."
 
 [binding.ollama.candidates]
-light = ["qwen3.5-oc:2b", "qwen3.5-oc:4b"]
-mid   = ["qwopus-coding-thinking-256k:9b", "qwen3.5-reasoning-thinking-256k:9b"]
-heavy = ["qwopus-coding-thinking-256k:9b"]               # same model, high effort
+light = ["qwen35-oc-2b-128k:latest", "qwen35-oc-4b-128k:latest"]
+mid   = ["qwen35-oc-4b-128k:latest", "qwen35-oc-2b-128k:latest"]
+heavy = ["qwen38-9b-oracle:128k"]
 
 [binding.google]
 L0       = ""
@@ -206,7 +206,7 @@ providers  = ["openai", "ollama"]
 model_fmt  = "{id}"
 effort_key = "model_reasoning_effort"
 agent_dir  = "~/.skills/codex-agents"   # the operator's convention; native loading is UNVERIFIED
-config     = "~/.codex/config.toml"     # profiles are the verified native path
+config     = "~/.codex/config.toml"     # named profiles render to sibling *.config.toml files
 provider_refs = { openai = "copilot-proxy", ollama = "copilot-proxy" }
 
 [harness.opencode]

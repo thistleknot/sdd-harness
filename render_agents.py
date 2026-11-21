@@ -1,4 +1,18 @@
-"""Render the party into every harness's native agent settings.
+"""| Stage | Mechanism | Tag | Requirements |
+|---|---|---|---|
+| LOAD | Read role/provider/harness declarations from tiers.toml and agent bodies | [mandatory] | R1 |
+| RESOLVE | Resolve provider bindings and squash roles through party.py | [mandatory] | R1 |
+| PROJECT | Emit native agent files and per-client settings through harness_write artifacts | [mandatory] | R1, REQ #118 |
+| MIGRATE | Move generated Codex party tables into named profile files and remove their owned marker block | [opt] | REQ #118 |
+| WRITE | Apply only with --apply, backing up every changed destination | [mandatory] | R1 |
+
+R1: WHEN party rendering targets Codex, the system MUST emit each role/provider profile as a top-level ~/.codex/<profile>.config.toml file and remove only generated legacy profile tables from the owned marker block.
+R2: WHEN an OpenCode native task invokes the Oracle role, the projected role MUST accept the inline task prompt and return its result inline; packet files are optional and MUST NOT be required unless the caller names a packet protocol.
+CLOSED: Embedded [profiles.*] role tables are rejected because Codex CLI 0.134+ requires named profile settings in separate files.
+Preconditions: tiers.toml and declared agent bodies are readable; Codex profiles use supported top-level TOML keys; native task consumers accept inline results.
+Failure modes: malformed or ambiguous owned profile blocks stop rendering before writes.
+
+Render the party into every harness's native agent settings.
 
 Spec: C:/Users/user/.claude/plans/make-harness-render-and-install-the-party.md
       (operator instruction 2026-10-08: ~/.harness holds agent settings across harness
@@ -17,7 +31,7 @@ Two paths live here:
   PARTY (every harness):  --harness NAME|all [--provider P|all] [--window lo:hi]
                           [--leader] (--plan | --check | --apply)
       claude    agents/*.md in the vault (sync-to-claude.ps1 copies them to ~/.claude)
-      codex     agent TOMLs + [profiles.party_*] in config.toml (marker block)
+      codex     agent TOMLs + named profile config files (legacy marker block migrated)
       opencode  agents/<role>-<provider>.md + effort variants merged into opencode.json
       pi        ~/.pi/agent/agents/<role>-<provider>.md (refuses a model not in models.json)
       kiro, gemini, hermes   one instruction document each: their native agent formats
@@ -342,10 +356,17 @@ def party_claude(schema: dict, party: Party, leader: bool) -> Rendered:
 
 
 def party_codex(schema: dict, party: Party, leader: bool) -> Rendered:
+    """Render Codex agents and native named profile config files.
+
+    Require: The party has one resolved provider and configured model/provider identifiers.
+    Guarantee: Each unsquashed profile is emitted as a standalone top-level Codex profile file.
+    Maintain: Existing profile values migrate unchanged; the owned base-config block is removed.
+    Assert: Profile names and TOML bodies are valid before artifacts reach the writer.
+    """
     h = schema["harness"]["codex"]
     agent_dir, config = _expand(schema, "codex", "agent_dir"), _expand(schema, "codex", "config")
     provider_ref = h.get("provider_refs", {}).get(party.provider, party.provider)
-    arts, profiles = [], []
+    arts, profiles = [], {}
     head = _header(schema, "codex", party.provider)
     for r in party.roles:
         if r.kind == "agent" and r.squashed_into is None:
@@ -361,18 +382,115 @@ def party_codex(schema: dict, party: Party, leader: bool) -> Rendered:
                     f"developer_instructions = {_toml_multiline(body)}\n")
             arts.append(Artifact(agent_dir / f"{stem}.toml", text, "file"))
         if r.squashed_into is None:
-            profiles.append(f"[profiles.party_{r.role}_{party.provider}]\n"
-                            f"model = {_toml_str(_model_id(schema, 'codex', party.provider, r.model))}\n"
-                            f"model_provider = {_toml_str(provider_ref)}\n"
-                            f"{r.effort_key} = {_toml_str(r.effort_value)}")
-    arts.append(Artifact(config, "\n\n".join(profiles), "tomlblock"))
-    if leader and party.leader():
-        ld = party.leader()
-        arts.append(Artifact(config, json.dumps({
-            "model": _toml_str(_model_id(schema, "codex", party.provider, ld.model)),
-            ld.effort_key: _toml_str(ld.effort_value),
-            "model_provider": _toml_str(provider_ref)}), "tomlkeys"))
+            profile_name = f"party_{r.role}_{party.provider}"
+            profiles[profile_name] = (
+                f"model = {_toml_str(_model_id(schema, 'codex', party.provider, r.model))}\n"
+                f"model_provider = {_toml_str(provider_ref)}\n"
+                f"{r.effort_key} = {_toml_str(r.effort_value)}\n"
+            )
+    arts.extend(Artifact(config.with_name(f"{name}.config.toml"), body, "file")
+                for name, body in profiles.items())
     return Rendered(arts, list(party.warnings))
+
+
+def _codex_profile_migration_artifacts(config_path: Path, rendered_profiles: set[str],
+                                       leader_keys: dict[str, str] | None) -> list[Artifact]:
+    """Move legacy party tables to profile files and remove the owned marker block.
+
+    Require: Profile names are simple Codex identifiers; existing owned blocks have paired markers.
+    Guarantee: Returns missing legacy profile files and at most one base-config update.
+    Maintain: Text outside the owned block and unowned profile tables remain unchanged.
+    Assert: Migrated profile bodies and the resulting base config parse as TOML.
+    """
+    config_text = hw.read_existing(config_path)
+    before = config_text or ""
+    after = before
+    migrated: dict[str, str] = {}
+    lines = before.splitlines(keepends=True)
+    begin_indexes = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == hw.TOML_BEGIN]
+    end_indexes = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == hw.TOML_END]
+    profile_header = re.compile(r"^\s*\[profiles\.([A-Za-z0-9_-]+)\]\s*(?:#.*)?\r?\n?$")
+    table_header = re.compile(r"^\s*\[[^\]]+\]")
+    if len(begin_indexes) > 1 or len(end_indexes) > 1:
+        raise RenderError(f"{config_path}: ambiguous Codex party markers; refusing profile migration")
+    if begin_indexes and not end_indexes:
+        raise RenderError(f"{config_path}: Codex party begin marker has no end marker")
+    if end_indexes and not begin_indexes:
+        end = end_indexes[0]
+        last_other_table = max((i for i, line in enumerate(lines[:end])
+                                if table_header.match(line) and not profile_header.match(line)), default=-1)
+        party_headers = [i for i in range(last_other_table + 1, end) if profile_header.match(lines[i])]
+        if not party_headers:
+            raise RenderError(f"{config_path}: missing an unambiguous legacy party-block start marker")
+        block_start = content_start = party_headers[0]
+    elif begin_indexes:
+        block_start, content_start, end = begin_indexes[0], begin_indexes[0] + 1, end_indexes[0]
+    else:
+        block_start = content_start = end = None
+    if block_start is not None:
+        if end <= block_start:
+            raise RenderError(f"{config_path}: Codex party markers are out of order")
+        region = lines[content_start:end]
+        index = 0
+        while index < len(region):
+            match = profile_header.match(region[index])
+            if match is None:
+                if region[index].strip() and not region[index].lstrip().startswith("#"):
+                    raise RenderError(f"{config_path}: unexpected content inside Codex party markers")
+                index += 1
+                continue
+            name = match.group(1)
+            next_index = index + 1
+            while next_index < len(region) and not table_header.match(region[next_index]):
+                next_index += 1
+            body = "".join(region[index + 1:next_index]).lstrip("\r\n")
+            if body and not body.endswith(("\n", "\r")):
+                body += "\n"
+            try:
+                parsed_body = tomllib.loads(body)
+            except Exception as exc:
+                raise RenderError(f"{config_path}: invalid legacy profile {name!r}: {exc}") from exc
+            if not parsed_body:
+                raise RenderError(f"{config_path}: empty legacy profile {name!r}")
+            migrated[name] = body
+            index = next_index
+        after = "".join(lines[:block_start] + lines[end + 1:])
+
+    if after:
+        try:
+            remaining_profiles = tomllib.loads(after).get("profiles", {})
+        except Exception as exc:
+            raise RenderError(f"{config_path}: base config is invalid TOML: {exc}") from exc
+        conflicts = set(rendered_profiles) & set(remaining_profiles if isinstance(remaining_profiles, dict) else {})
+        if conflicts:
+            names = ", ".join(sorted(conflicts))
+            raise RenderError(f"{config_path}: generated profiles outside the owned block need manual review: {names}")
+        orphaned = {name for name in remaining_profiles if name.startswith("party_")} if isinstance(remaining_profiles, dict) else set()
+        if orphaned:
+            names = ", ".join(sorted(orphaned))
+            raise RenderError(f"{config_path}: party profiles remain outside the migrated block: {names}")
+
+    artifacts = []
+    for name, body in sorted(migrated.items()):
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise RenderError(f"invalid Codex profile name {name!r}")
+        if name in rendered_profiles:
+            continue
+        try:
+            tomllib.loads(body)
+        except Exception as exc:
+            raise RenderError(f"invalid Codex profile {name!r}: {exc}") from exc
+        artifacts.append(Artifact(config_path.with_name(f"{name}.config.toml"), body, "file"))
+
+    if leader_keys:
+        after = hw.set_toplevel_toml_keys(after or None, leader_keys)
+    if after != before:
+        try:
+            tomllib.loads(after)
+        except Exception as exc:
+            raise RenderError(f"{config_path}: migrated base config is invalid TOML: {exc}") from exc
+        artifacts.append(Artifact(config_path, after, "file"))
+    return artifacts
 
 
 def _opencode_frontmatter(schema: dict, party: Party, r: RoleSetting, description: str, stem: str) -> str:
@@ -533,6 +651,7 @@ def render_party(schema: dict, harness: str, provider: str | None = None, window
     if leader and len(chosen) != 1:
         raise RenderError("--leader sets one set of session defaults, so it needs a single --provider")
     arts, notes = [], []
+    codex_leader_keys = None
     for prov in chosen:
         try:
             party = resolve_party(schema, harness, prov, window)
@@ -542,6 +661,22 @@ def render_party(schema: dict, harness: str, provider: str | None = None, window
         arts += out.artifacts
         notes += [f"{harness}/{prov}: {n}" for n in out.notes]
         notes.append(report(party))
+        if harness == "codex" and leader and party.leader():
+            ld = party.leader()
+            provider_ref = h.get("provider_refs", {}).get(party.provider, party.provider)
+            codex_leader_keys = {
+                "model": _toml_str(_model_id(schema, "codex", party.provider, ld.model)),
+                ld.effort_key: _toml_str(ld.effort_value),
+                "model_provider": _toml_str(provider_ref),
+            }
+    if harness == "codex":
+        config_path = _expand(schema, "codex", "config")
+        generated_profiles = {
+            artifact.path.name.removesuffix(".config.toml")
+            for artifact in arts
+            if artifact.path.parent == config_path.parent and artifact.path.name.endswith(".config.toml")
+        }
+        arts.extend(_codex_profile_migration_artifacts(config_path, generated_profiles, codex_leader_keys))
     return Rendered(combine(arts), notes)
 
 

@@ -60,6 +60,44 @@
   "opencode_plugins": [
     "@tarquinen/opencode-dcp@latest"
   ],
+  "opencode_caveman": {
+    "enabled": true
+  },
+  "opencode_agent_tools": {
+    "orchestrator": {
+      "rea*": false
+    }
+  },
+  "opencode_agent_permissions": {
+    "oracle": {
+      "bash": "deny",
+      "edit": "deny",
+      "write": "deny",
+      "task": "deny",
+      "retrieve-skills_retrieve_skills": "allow",
+      "retrieve-skills_read_skill": "allow"
+    }
+  },
+  "opencode_context_proxy": {
+    "enabled": true,
+    "provider": "litellm",
+    "upstream_url": "http://127.0.0.1:4000/v1",
+    "proxy_url": "http://127.0.0.1:8789/v1",
+    "health_url": "http://127.0.0.1:8789/health",
+    "command": "C:/Users/user/py310/Scripts/headroom.exe",
+    "port": 8789,
+    "mode": "token"
+  },
+  "codex_context_proxy": {
+    "enabled": true,
+    "provider": "copilot-proxy",
+    "upstream_url": "http://127.0.0.1:4000/v1",
+    "proxy_url": "http://127.0.0.1:8789/v1",
+    "health_url": "http://127.0.0.1:8789/health",
+    "command": "C:/Users/user/py310/Scripts/headroom.exe",
+    "port": 8789,
+    "mode": "token"
+  },
   "global_hooks": {
     "claude": [
       {
@@ -98,12 +136,12 @@
       "worker": "claude-haiku-4.5"
     },
     "local": {
-      "orchestrator": "qwopus-coding-thinking-256k:4b",
-      "planner": "qwen3.5-reasoning-thinking-256k:9b",
-      "critic": "qwen3.5-oc:4b",
-      "fixer": "qwen3.5-reasoning-thinking-256k:9b",
+      "orchestrator": "qwen35-oc-4b-128k:latest",
+      "planner": "qwen38-9b-oracle:128k",
+      "critic": "qwen35-oc-2b-128k:latest",
+      "fixer": "qwen35-oc-4b-128k:latest",
       "architect": "hf.co/huihui-ai/Huihui-gemma-4-12B-agentic-fable5-abliterated-GGUF:Huihui-gemma4-v2-abliterated-Q8_0.gguf",
-      "worker": "qwen3.5-oc:2b"
+      "worker": "qwen35-oc-4b-128k:latest"
     }
   },
   "skill_packages": {
@@ -113,6 +151,7 @@
       "architecture-decision",
       "business-process",
       "entity-model",
+      "recursive-harness-self-improvement",
       "next",
       "open-questions",
       "release-notes",

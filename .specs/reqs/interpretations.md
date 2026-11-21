@@ -1,5 +1,22 @@
 # Current interpretations
 
+## CURRENT 2026-11-21 — Context assembly in the shared instruction export
+
+- Decision: Add one audience-scoped `.rules` fragment for task-directed context assembly and let the existing `adapter.py --target instructions` pipeline publish it; do not add retrieval behavior, storage, or a separate exporter path to `adapter.py`.
+- Basis: The reference describes context orchestration as a layer that selects, scopes, assembles, and verifies information. The harness already has a canonical ordered instruction exporter, and existing rules already cover epistemic tagging, intent framing, validation, and memory. The missing reusable contract is the bridge from task scope to authorized, fresh, bounded, source-backed evidence and independently checked outputs.
+- Evidence: `docs/references/context_layer.md`; exporter preview listed `055-context-assembly.md` and the same SHA-256 digest in all seven declared client views at order 55. All seven destinations reported unmapped baselines, so no live file was changed; the current playbook keeps publication gated until baseline mapping and fresh-client loader acceptance.
+
+## CURRENT 2026-11-21 — Request framing across harness instructions
+
+- Decision: Put the four-part request frame (Role/persona, Task/goal, Context/requirements/input with falsifiable evidence, Format/instructions/output) under the Operating Contract in the canonical operating rule and both live Claude/Codex instructions; retain the existing next-step rule from Codex. Do not merge Claude's 30-second command cutoff or sandbox-bypass instruction.
+- Basis: The operator explicitly requested this frame for any incoming request. Live-copy comparison found the Codex next-step rule absent from the canonical Operating Contract; the 30-second cutoff conflicts with the current bounded-test policy, and the sandbox-bypass instruction conflicts with current permission controls. The live documents have no instruction-registry markers, so direct edits avoid appending a duplicate full registry view.
+
+## CURRENT 2026-11-21 — Remote Claude runtime payload
+
+- Decision: Extend `sync-to-remote.ps1` to include `.rules/`, `.skills/GLOSSARY.md`, `.skills/plan-do/` and its referenced `task-breakdown` skill both at `~/.skills` and under Claude's native `~/.claude/skills`, `.harness/constitution.md`, `.harness/rules/`, and `.harness/hooks/plan_do_route.py` with `_common.py`; keep `.claude/settings.json` out of the payload.
+- Basis: The operator requires remote Claude to receive the support files its own instructions expect. SSH inspection confirmed the plan-do skill and router hook were absent. The skill master contains 42,649 files and is 5.26 GB, so copying all of it is not necessary when only the named package and glossary are runtime dependencies. Existing settings contain Windows paths and Windows-only integrations, so copying them would create invalid remote hook commands.
+- Supersedes: R22's former blanket exclusion of `.rules`, `.skills`, and `.harness` support. The prior wording is preserved in [the dated history](../../docs/playbooks/history/memory-and-harness-integration-2026-11-21.md).
+
 ## CURRENT 2026-11-18 — Canonical instruction source and publication views
 
 - Decision: Treat `~/.rules/*.md` as the only authored source of instruction rules; treat SQLite as revisioned publication views, target mappings, and delivery receipts. Require explicit `harnesses` and stable `order`, preserve unmanaged client text, preview without writes, refuse drift, back up changed targets, verify exact readback, withdraw stale managed rules when a mapped audience empties, and report known unsupported clients without claiming runtime parity. T4 implements seven native export encoders and per-client views; T5 owns fresh-client loader acceptance. Keep live publication gated until selected target baselines are mapped and T5 verifies loaders.

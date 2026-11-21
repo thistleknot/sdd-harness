@@ -175,6 +175,10 @@ def install_opencode():
         PLUGIN_ROOT / ".opencode" / "plugins" / "sdd-harness.js",
         plugins_dir / "sdd-harness.js"
     )
+    shutil.copy2(
+        PLUGIN_ROOT / ".opencode" / "plugins" / "oracle-context.py",
+        plugins_dir / "oracle-context.py"
+    )
 
     # Update opencode.json to include the plugin
     config_file = config_dir / "opencode.json"

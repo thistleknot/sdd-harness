@@ -1,4 +1,14 @@
-# Superseded remote Claude sync contract — 2026-11-21
+# Superseded context export and remote sync states — 2026-11-21
+
+## Superseded local context-export preview state — 2026-11-21
+
+The initial preview confirmed `055-context-assembly.md` in all seven declared
+client views. The later Codex and Claude apply request exposed prior-owner
+drift: Codex expected `043cfe8b…`, current `d01ef946…`; Claude expected
+`b60b9115…`, current `1b3ac78d…`. Baseline transfer refused both, preserving
+the targets. The remote sync succeeded and delivered the context rule.
+
+## Prior remote Claude sync contract
 
 The prior R22 copied only Claude's vault files plus `constitution.md` and
 `GLOSSARY.md`, and explicitly excluded `.rules`, skill packages, and the harness

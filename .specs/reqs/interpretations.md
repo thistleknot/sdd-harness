@@ -2,9 +2,9 @@
 
 ## CURRENT 2026-11-21 — Context assembly in the shared instruction export
 
-- Decision: Add one audience-scoped `.rules` fragment for task-directed context assembly and let the existing `adapter.py --target instructions` pipeline publish it; do not add retrieval behavior, storage, or a separate exporter path to `adapter.py`.
-- Basis: The reference describes context orchestration as a layer that selects, scopes, assembles, and verifies information. The harness already has a canonical ordered instruction exporter, and existing rules already cover epistemic tagging, intent framing, validation, and memory. The missing reusable contract is the bridge from task scope to authorized, fresh, bounded, source-backed evidence and independently checked outputs.
-- Evidence: `docs/references/context_layer.md`; exporter preview listed `055-context-assembly.md` and the same SHA-256 digest in all seven declared client views at order 55. All seven destinations reported unmapped baselines, so no live file was changed; the current playbook keeps publication gated until baseline mapping and fresh-client loader acceptance.
+- Decision: Keep one audience-scoped `.rules` fragment in the existing ordered exporter; do not add retrieval behavior, storage, or a separate exporter path. Preserve the current target-drift guard rather than force-rebaseline Codex or Claude.
+- Basis: The reference describes context orchestration as selecting, scoping, assembling, and verifying information. The no-write preview selected the fragment in all seven declared views. The requested Codex and Claude baseline transfers then failed because each current target digest differs from its prior RuleStore owner, so the exporter refused transfer without changing either target. The remote sync independently completed and copied the fragment.
+- Evidence: `docs/references/context_layer.md`; Codex prior/current digests `043cfe8b9aaafad1443f8601a7c4e5ac1be1b927666166d0ba5ae8838ce5bf1d` / `d01ef9466e33c04a7777f0ed4c73befaf46380dfbf51d2d33b11ffeb953a0b2b`; Claude prior/current digests `b60b9115fbab54b89fb3b429e3e2496d5903b87951da0a2e5c759996b0b2dfb8` / `1b3ac78dbc7c0dd8469dd83e8c83f3a5da586c815d6d94a75f9d3b8513ec9ff2`; remote SHA-256 equals local `055-context-assembly.md`. The earlier preview-only disposition is preserved in [dated history](../../docs/playbooks/history/memory-and-harness-integration-2026-11-21.md).
 
 ## CURRENT 2026-11-21 — Request framing across harness instructions
 

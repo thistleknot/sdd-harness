@@ -1,16 +1,19 @@
 """| Stage | Mechanism | Tag | Requirements |
 |---|---|---|---|
 | LOAD | Read role/provider/harness declarations from tiers.toml and agent bodies | [mandatory] | R1 |
-| RESOLVE | Resolve provider bindings and squash roles through party.py | [mandatory] | R1 |
+| RESOLVE | Resolve provider bindings, per-model effort support, and role squashing through party.py | [mandatory] | R1, R4 |
 | PROJECT | Emit native agent files and per-client settings through harness_write artifacts | [mandatory] | R1, R3, REQ #118 |
 | MIGRATE | Move generated Codex party tables into named profile files and remove their owned marker block | [opt] | REQ #118 |
 | WRITE | Apply only with --apply, backing up every changed destination | [mandatory] | R1 |
 
 R1: WHEN party rendering targets Codex, the system MUST emit each role/provider profile as a top-level ~/.codex/<profile>.config.toml file and remove only generated legacy profile tables from the owned marker block.
 R2: WHEN an OpenCode native task invokes the Oracle role, the projected role MUST accept the inline task prompt and return its result inline; packet files are optional and MUST NOT be required unless the caller names a packet protocol.
-R3: WHEN OpenCode renders the `litellm` provider, every role MUST resolve to its configured LiteLLM model alias and emit its configured reasoning variant in `opencode.json`.
+R3: WHEN OpenCode renders a role, the system MUST resolve it to its configured provider model alias.
+R4: WHEN OpenCode renders a model listed in its provider binding's `no_reasoning_models`, the system MUST set `reasoning` false and omit the effort field and generated party variant; its JSON merge MUST prune stale owned variants while preserving unowned variants.
+R5: IF the OpenCode model is absent from `no_reasoning_models`, then the system MUST preserve the configured effort field and generated party variant.
+R6: WHEN a provider binding lists an alias in `no_reasoning_models`, the system MUST reject a malformed list before projecting OpenCode artifacts.
 CLOSED: Embedded [profiles.*] role tables are rejected because Codex CLI 0.134+ requires named profile settings in separate files.
-Preconditions: tiers.toml and declared agent bodies are readable; Codex profiles use supported top-level TOML keys; native task consumers accept inline results; the OpenCode LiteLLM provider aliases exist in the client config.
+Preconditions: tiers.toml and declared agent bodies are readable; `no_reasoning_models` contains exact provider aliases; Codex profiles use supported top-level TOML keys; native task consumers accept inline results; OpenCode LiteLLM aliases exist in the client config.
 Failure modes: malformed or ambiguous owned profile blocks stop rendering before writes.
 
 Render the party into every harness's native agent settings.
@@ -227,6 +230,30 @@ def resolve(schema: dict, harness: str, role_key: str) -> dict:
         "effort_value": effort_map[reasoning],
         "tools": role["tools"],
     }
+
+
+def _model_supports_effort(binding: dict, model: str) -> bool:
+    """Return whether OpenCode should send a reasoning-effort control.
+
+    Require: The provider binding is resolved and model is an exact alias.
+    Guarantee: Listed no-reasoning models return False; other aliases return True.
+    Called by: OpenCode agent and model-catalog projection.
+    Depends on: The binding's optional `no_reasoning_models` list.
+
+    Args:
+        binding: Provider configuration from `tiers.toml`.
+        model: Exact provider model alias selected for a role.
+
+    Returns:
+        Whether generated OpenCode configuration includes effort controls.
+
+    Raises:
+        RenderError: If `no_reasoning_models` is not a list of model aliases.
+    """
+    excluded = binding.get("no_reasoning_models", [])
+    if not isinstance(excluded, list) or any(not isinstance(alias, str) for alias in excluded):
+        raise RenderError("binding no_reasoning_models must be a list of model alias strings")
+    return model not in excluded
 
 
 # --- legacy claude rendering (byte-exact) ------------------------------------
@@ -495,13 +522,34 @@ def _codex_profile_migration_artifacts(config_path: Path, rendered_profiles: set
 
 
 def _opencode_frontmatter(schema: dict, party: Party, r: RoleSetting, description: str, stem: str) -> str:
+    """Build an OpenCode agent header with only supported reasoning controls.
+
+    Require: The role's provider exists in the schema and its model is resolved.
+    Guarantee: Unsupported model aliases have no party variant in their header.
+    Called by: `party_opencode`.
+    Depends on: The provider's `no_reasoning_models` capability list.
+
+    Args:
+        schema: Parsed harness and provider configuration.
+        party: Resolved OpenCode party.
+        r: Role whose agent header is being rendered.
+        description: Source role description.
+        stem: Stable OpenCode agent identifier.
+
+    Returns:
+        Complete YAML frontmatter for the role.
+
+    Raises:
+        RenderError: If the provider capability list is malformed.
+    """
     perms = {p: "deny" for p in ALL_OPENCODE_PERMS}
     for tool in r.tools:
         for p in OPENCODE_PERMS.get(tool, []):
             perms[p] = "allow"
     lines = [FENCE, _header(schema, "opencode", party.provider), f"name: {stem}", f"description: {_yaml_str(description)}",
              "mode: subagent", f"model: {_model_id(schema, 'opencode', party.provider, r.model)}"]
-    if party.provider in VARIANT_PROVIDERS:
+    binding = schema["binding"][party.provider]
+    if party.provider in VARIANT_PROVIDERS and _model_supports_effort(binding, r.model):
         lines.append(f"variant: party_{r.effort}")
     lines.append("permission:")
     lines += [f"  {p}: {perms[p]}" for p in ALL_OPENCODE_PERMS]
@@ -524,8 +572,29 @@ def _opencode_variant(model: str, effort_value: str) -> dict:
 
 
 def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
+    """Render OpenCode role files and provider model metadata.
+
+    Require: `party` is resolved against a provider declared by OpenCode.
+    Guarantee: No-thinking aliases have reasoning disabled and no generated party variants.
+    Maintain: Every unrelated permission and operator-owned variant stays merge-owned elsewhere.
+    Assert: The returned artifacts are complete before the writer applies any destination.
+    Called by: `render_party` for the OpenCode harness.
+    Depends on: `_opencode_frontmatter`, `_model_supports_effort`, and `harness_write`.
+
+    Args:
+        schema: Parsed harness and provider configuration.
+        party: Resolved OpenCode party.
+        leader: Whether to emit session-level model defaults.
+
+    Returns:
+        Agent and JSON-merge artifacts plus routing notes.
+
+    Raises:
+        RenderError: If provider capability data is malformed.
+    """
     agent_dir, config = _expand(schema, "opencode", "agent_dir"), _expand(schema, "opencode", "config")
     arts, notes = [], list(party.warnings)
+    binding = schema["binding"][party.provider]
     for r in party.agent_roles():
         description, body, _ = _source(r.name)
         stem = _stem(schema, "opencode", party, r)
@@ -534,8 +603,15 @@ def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
         models: dict = {}
         for r in party.roles:
             if r.squashed_into is None:
-                models.setdefault(r.model, ({"variants": {}} if party.provider == "litellm" else {"name": r.model, "variants": {}}))["variants"][f"party_{r.effort}"] = \
-                    _opencode_variant(r.model, r.effort_value)
+                model_config = models.setdefault(
+                    r.model,
+                    {"variants": {}} if party.provider == "litellm" else {"name": r.model, "variants": {}},
+                )
+                if _model_supports_effort(binding, r.model):
+                    model_config["variants"][f"party_{r.effort}"] = _opencode_variant(r.model, r.effort_value)
+                else:
+                    model_config["reasoning"] = False
+                    notes.append(f"opencode: {r.model} does not support thinking; reasoning controls omitted")
         arts.append(Artifact(config, json.dumps({"provider": {party.provider: {"models": models}}}), "jsonmerge",
                              owned_prefix="party_"))
     else:

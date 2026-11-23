@@ -3,12 +3,13 @@
 | FIXTURE | Isolate Codex home, harness root, and representative config contents | [mandatory] | R1 |
 | PROJECT | Render each harness party into native artifacts | [mandatory] | R1, R11 |
 | MIGRATE | Verify Codex profile files replace only the generated legacy marker block | [mandatory] | R9, REQ #118 |
-| VERIFY | Parse formats, preserve unmanaged settings, and confirm repeatability | [mandatory] | R1, R9 |
+| VERIFY | Parse formats, preserve unmanaged settings, and confirm repeatability | [mandatory] | R1, R9, R12 |
 
 R1: WHEN a party render test runs, filesystem writes MUST stay inside its temporary fixture.
 R9: WHEN Codex party roles render, tests MUST verify separate top-level profile files, safe legacy migration, and preservation of unmanaged profile/config values.
 R10: WHEN OpenCode Oracle role instructions render, tests MUST verify native inline-task compatibility and that packet files are not required unless the caller names that protocol.
 R11: WHEN the Codex OpenAI party renders, the Oracle profile MUST use the configured OpenAI L3 model at high reasoning effort.
+R12: WHEN a LiteLLM alias is listed in `no_reasoning_models`, tests MUST verify OpenCode disables reasoning for that alias, removes its stale party variant while preserving operator variants, and retains effort variants for other aliases.
 
 Tests for the party renderers in render_agents.py (claude, codex, opencode, pi, docs, CLI).
 
@@ -259,6 +260,61 @@ def test_opencode_variants_merge_into_the_existing_config_without_touching_the_r
     assert set(models["anthropic/claude-sonnet-5.5"]["variants"]) == {"party_medium"}
     assert ch.warnings == ["the existing file has comments; they are dropped on write"]
     assert hw.compute(patch, ch.after).status == "IDENTICAL"
+
+
+def test_opencode_litellm_omits_effort_for_models_without_thinking(schema, home):
+    """The model capability list disables effort and clears stale generated variants.
+
+    Require: OpenCode LiteLLM roles resolve from the fixture's `tiers.toml` schema.
+    Guarantee: A no-thinking Oracle has no party variant; other roles keep theirs.
+    Maintain: Malformed capability data fails before a render can be applied.
+    Assert: Generated variants are removed while operator-owned variants survive.
+
+    Args:
+        schema: Real tiers schema loaded as a test fixture.
+        home: Temporary harness home used by artifact projection.
+
+    Returns:
+        None.
+
+    Raises:
+        AssertionError: If model capability is projected incorrectly.
+    """
+    binding = schema["binding"]["litellm"]
+    binding["no_reasoning_models"] = ["party-oracle"]
+    out = ra.render_party(schema, "opencode", "litellm")
+    arts = by_name(out.artifacts)
+    oracle = frontmatter(arts["oracle-litellm.md"].text)
+    patch = next(a for a in out.artifacts if a.mode == "jsonmerge")
+    models = json.loads(patch.text)["provider"]["litellm"]["models"]
+
+    assert "variant" not in oracle
+    assert models["party-oracle"]["reasoning"] is False
+    assert models["party-oracle"]["variants"] == {}
+    assert models["party-leader"]["variants"]["party_low"]["reasoning"]["effort"] == "low"
+    assert any("does not support thinking" in note for note in out.notes)
+
+    existing = json.dumps({"provider": {"litellm": {"models": {"party-oracle": {
+        "reasoning": True,
+        "variants": {"party_low": {"reasoning": {"effort": "low"}}, "operator": {"temperature": 0.1}},
+    }}}}})
+    merged = json.loads(hw.compute(patch, existing).after)
+    oracle_model = merged["provider"]["litellm"]["models"]["party-oracle"]
+    assert oracle_model["reasoning"] is False
+    assert oracle_model["variants"] == {"operator": {"temperature": 0.1}}
+
+    binding["no_reasoning_models"] = []
+    ordinary = ra.render_party(schema, "opencode", "litellm")
+    ordinary_arts = by_name(ordinary.artifacts)
+    ordinary_oracle = frontmatter(ordinary_arts["oracle-litellm.md"].text)
+    ordinary_patch = next(a for a in ordinary.artifacts if a.mode == "jsonmerge")
+    ordinary_models = json.loads(ordinary_patch.text)["provider"]["litellm"]["models"]
+    assert ordinary_oracle["variant"] == "party_low"
+    assert ordinary_models["party-oracle"]["variants"]["party_low"]["reasoning"]["effort"] == "low"
+
+    binding["no_reasoning_models"] = "party-oracle"
+    with pytest.raises(ra.RenderError, match="must be a list"):
+        ra.render_party(schema, "opencode", "litellm")
 
 
 def test_openai_models_take_the_flat_reasoning_effort_and_other_vendors_the_nested_object():

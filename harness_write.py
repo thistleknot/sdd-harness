@@ -1,24 +1,19 @@
-"""| Stage | Mechanism | Contract |
-| INTEGRATE | Atomically write exact bytes with non-overwriting backups | [mandatory] R10-R12 |
-
-Spec: docs/playbooks/memory-and-harness-integration.md R10-R12.
-CLOSED: parallel registries or writers for the same feature.
-Preconditions and failure modes: see the governing spec and incumbent contract below.
-
-| Stage | Mechanism | Tag | Requirements |
+"""| Stage | Mechanism | Tag | Requirements |
 |---|---|---|---|
-| GUARD | Reject every denylisted artifact before filesystem access | [mandatory] | R1 |
+| GUARD | Reject denylisted artifacts before filesystem access | [mandatory] | R1 |
 | READ | Read permitted existing files without changing bytes | [mandatory] | R1 |
-| PLAN | Compute file, JSON merge, TOML/Markdown block, or TOML-key changes | [mandatory] | R2 |
+| PLAN | Compute file, JSON merge, TOML/Markdown block, or TOML-key changes; prune omitted owned-prefix keys | [mandatory] | R2, R4 |
 | WRITE | Back up changed permitted files and replace them atomically | [mandatory] | R3 |
 
-R1: When a denylisted path is supplied, the system shall reject it before any existence check or read.
-R2: When a change is planned, the system shall preserve unowned namespaces and reject secret-looking keys.
-R3: When changed existing bytes are written, the system shall save their preceding bytes before atomic replacement.
+R1: WHEN a denylisted path is supplied, the system MUST reject it before any existence check or read.
+R2: WHEN a change is planned, the system MUST preserve unowned namespaces and reject secret-looking keys.
+R3: WHEN changed existing bytes are written, the system MUST save their preceding bytes before atomic replacement.
+R4: WHEN a JSON merge declares an owned prefix, the system MUST remove existing keys with that prefix absent from the corresponding patch map, replace supplied prefixed keys wholesale, and preserve keys outside the prefix.
+CLOSED: Parallel registries or writers for the same feature are rejected; loosening the Hermes credential-file deny rule is rejected because Hermes owns its native configuration writer and backups.
+Preconditions: Callers declare artifact ownership and mode; tests use isolated destinations and backup roots.
+Failure modes: Unsafe paths, malformed formats, or failed backups raise before replacement.
 
-CLOSED: Loosening the Hermes credential-file deny rule is rejected; Hermes owns its native configuration writer and backups.
-Preconditions: callers declare artifact ownership and mode; tests use isolated destinations and backup roots.
-Failure modes: unsafe paths, malformed formats, or failed backups raise before replacement.
+`harness_write.py` computes and applies scoped text and configuration artifacts.
 """
 from __future__ import annotations
 
@@ -51,7 +46,7 @@ class Artifact:
     text: str
     mode: str = "file"
     note: str = ""
-    owned_prefix: str = ""   # jsonmerge: patch keys with this prefix are ours and REPLACE what is there
+    owned_prefix: str = ""   # jsonmerge: prefixed keys are replaced when supplied and removed when omitted
     begin: str = ""          # tomlblock/mdblock: custom begin marker (default: the party marker)
     end: str = ""            # tomlblock/mdblock: custom end marker (default: the party marker)
 
@@ -189,16 +184,32 @@ def load_jsonc(text: str):
 
 
 def deep_merge(base, patch, owned_prefix: str = ""):
-    """Dicts merge recursively, everything else in `patch` replaces. Neither input is mutated.
+    """Merge dictionaries while reconciling keys owned by a generated prefix.
 
-    A patch key starting with `owned_prefix` is owned by the generator: it replaces the existing
-    value wholesale, so a stale sub-key from an older render cannot survive beside the new one.
+    Args:
+        base: Existing JSON-compatible value.
+        patch: New JSON-compatible value to merge.
+        owned_prefix: Optional key prefix owned by the generated patch.
+
+    Returns:
+        A merged value; dictionary inputs are copied rather than mutated.
+
+    Require: Inputs contain JSON-compatible values and owned keys use the declared prefix.
+    Guarantee: Omitted prefixed keys are removed; supplied prefixed keys replace wholesale.
+    Maintain: Keys outside the prefix retain recursive merge behavior.
+    Assert: Neither input is mutated.
+
+    Failure modes:
+        Non-dictionary values replace their base value as a normal JSON merge.
     """
     if isinstance(base, dict) and isinstance(patch, dict):
-        out = dict(base)
+        out = {
+            key: value for key, value in base.items()
+            if not (owned_prefix and str(key).startswith(owned_prefix) and key not in patch)
+        }
         for k, v in patch.items():
             owned = bool(owned_prefix) and str(k).startswith(owned_prefix)
-            out[k] = deep_merge(base[k], v, owned_prefix) if (k in base and not owned) else v
+            out[k] = deep_merge(out[k], v, owned_prefix) if (k in out and not owned) else v
         return out
     return patch
 

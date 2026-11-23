@@ -1,8 +1,10 @@
-## CURRENT 2026-11-22 — Shared party-oracle target
+## CURRENT 2026-11-22 — Nemotron Oracle has no thinking control
 
-- Decision: Preserve the stable `party-oracle` alias and point it to the exact pulled NVIDIA Nemotron 3.5 Bolt E4B Q4_K_M tag through LiteLLM; set the Oracle effort to low and keep its 65,536 context cap. Preserve all other role aliases and Oracle's read-only permissions.
-- Basis: The request names the new shared party-oracle and low thinking; Ollama confirms the exact tag is present and reports its 65,536 context. Keeping the alias avoids client-specific route changes.
-- Status: LiteLLM was restarted; readiness is healthy, the `party-oracle` alias is listed, and `/model/info` reports the exact Nemotron Ollama target. No inference request has been sent, so tool use and effective reasoning behavior remain unverified.
+- Decision: Preserve `party-oracle`, the exact Nemotron tag, its 65,536 context cap, and OpenCode's read-only permissions. Omit reasoning-effort and thinking fields for this alias because the model rejects them.
+- Basis: The LiteLLM `:4000` endpoint lists `party-oracle`; its active `/model/info` still reports `extra_body.reasoning_effort=low`. A no-reasoning `/v1/chat/completions` request returned HTTP 400 `does not support thinkingNo`. The saved LiteLLM config omits the field, establishing a stale active deployment. The OpenCode catalog is `reasoning: false` with no effort variant, and the saved route targets the exact Nemotron tag.
+- Status: After the user restarted the service, `:4000/v1/models` listed `party-oracle`; `/model/info` showed the exact E4B tag and no reasoning fields; no-reasoning inference returned HTTP 200 with non-empty output. OpenCode was re-exported and returned `OPENCODE_NEMOTRON_OK` through `party-oracle`. Hitch already selects/catalogs `party-oracle` and exposes it to Claude with label `party-oracle` over an opaque `claude-model-…` wire ID; no separate model registration is needed. Claude Code through the existing `.bat` returned `CLAUDE_CODE_NEMOTRON_OK` with a bare/minimal prompt; its default 64,152-token prompt exceeds the reported 49,152-token context limit.
+- History: The prior low-effort route decision is preserved in [oracle-route-2026-11-22.md](../../docs/playbooks/history/oracle-route-2026-11-22.md).
+
 # Current interpretations
 
 ## CURRENT 2026-11-22 — Hermes is a native party-model target

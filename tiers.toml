@@ -202,10 +202,12 @@ L3 = "party-oracle"
 resolved = "2026-11-22"
 base_url = "http://127.0.0.1:4000/v1"
 effort_key = "reasoning.effort"
-dial = [["L0", "low"], ["L1", "low"], ["L2", "low"], ["L3", "low"]]
-no_reasoning_models = ["party-oracle"]
-note = "Confirmed local mapping: Scout and Fighter use Kestrel 4B Coder at low through separate role aliases; Leader uses Qwopus3.5 4B v3 MTP at low; Oracle routes on the low tier to Nemotron 3.5 Bolt E4B Q4_K_M, which has no thinking capability, so no effort field is sent."
+dial = [["L0", "low"], ["L1", "low"], ["L2", "low"], ["L3", "medium"]]
+note = "Local party: Scout and Fighter use Kestrel 4B Coder at low through separate aliases; Leader and Oracle use the same Qwopus3.5 4B v3 MTP weights, with low effort for Leader and medium for Oracle. The sole Oracle alias is party-oracle."
 L2 = "party-fighter"
+
+# The stable Oracle alias is part of the L3 role binding and is shared by
+# OpenCode and OxenHitch/Claude Code; no alternate Oracle catalog aliases exist.
 
 [binding.litellm.effort_map]
 low = "low"

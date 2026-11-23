@@ -2,7 +2,7 @@
 |---|---|---|---|
 | LOAD | Read role/provider/harness declarations from tiers.toml and agent bodies | [mandatory] | R1 |
 | RESOLVE | Resolve provider bindings, per-model effort support, and role squashing through party.py | [mandatory] | R1, R4 |
-| PROJECT | Emit native agent files and per-client settings through harness_write artifacts | [mandatory] | R1, R3, REQ #118 |
+| PROJECT | Emit native agents, declared fixed-model role aliases, and model catalog settings through harness_write artifacts | [mandatory] | R1, R3, R7-R8, REQ #118 |
 | MIGRATE | Move generated Codex party tables into named profile files and remove their owned marker block | [opt] | REQ #118 |
 | WRITE | Apply only with --apply, backing up every changed destination | [mandatory] | R1 |
 
@@ -12,8 +12,10 @@ R3: WHEN OpenCode renders a role, the system MUST resolve it to its configured p
 R4: WHEN OpenCode renders a model listed in its provider binding's `no_reasoning_models`, the system MUST set `reasoning` false and omit the effort field and generated party variant; its JSON merge MUST prune stale owned variants while preserving unowned variants.
 R5: IF the OpenCode model is absent from `no_reasoning_models`, then the system MUST preserve the configured effort field and generated party variant.
 R6: WHEN a provider binding lists an alias in `no_reasoning_models`, the system MUST reject a malformed list before projecting OpenCode artifacts.
-CLOSED: Embedded [profiles.*] role tables are rejected because Codex CLI 0.134+ requires named profile settings in separate files.
-Preconditions: tiers.toml and declared agent bodies are readable; `no_reasoning_models` contains exact provider aliases; Codex profiles use supported top-level TOML keys; native task consumers accept inline results; OpenCode LiteLLM aliases exist in the client config.
+R7: WHEN an OpenCode provider declares `model_catalog`, the renderer MUST validate and emit each listed model's name, reasoning capability, context/output limits, and declared party effort variant.
+R8: WHEN an OpenCode provider declares an `agent_aliases` entry, the renderer MUST emit a unique agent from its named source role with the declared fixed model and effort, preserving the source role's prompt and permissions.
+CLOSED: Embedded [profiles.*] role tables are rejected because Codex CLI 0.134+ requires named profile settings in separate files. Dynamic Oracle selection from a point-in-time VRAM check is rejected until one GPU admission lease covers competing local workloads; the check alone cannot reserve memory.
+Preconditions: tiers.toml and declared agent bodies are readable; capability lists and alias declarations are well-formed; Codex profiles use supported top-level TOML keys; native task consumers accept inline results; every emitted OpenCode LiteLLM alias exists in LiteLLM config.
 Failure modes: malformed or ambiguous owned profile blocks stop rendering before writes.
 
 Render the party into every harness's native agent settings.
@@ -572,10 +574,10 @@ def _opencode_variant(model: str, effort_value: str) -> dict:
 
 
 def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
-    """Render OpenCode role files and provider model metadata.
+    """Render OpenCode role files, fixed-model role aliases, and model metadata.
 
     Require: `party` is resolved against a provider declared by OpenCode.
-    Guarantee: No-thinking aliases have reasoning disabled and no generated party variants.
+    Guarantee: No-thinking aliases have reasoning disabled; declared fixed-model agents retain source permissions and prompt.
     Maintain: Every unrelated permission and operator-owned variant stays merge-owned elsewhere.
     Assert: The returned artifacts are complete before the writer applies any destination.
     Called by: `render_party` for the OpenCode harness.
@@ -590,15 +592,63 @@ def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
         Agent and JSON-merge artifacts plus routing notes.
 
     Raises:
-        RenderError: If provider capability data is malformed.
+        RenderError: If provider capability or fixed-model alias data is malformed.
     """
     agent_dir, config = _expand(schema, "opencode", "agent_dir"), _expand(schema, "opencode", "config")
     arts, notes = [], list(party.warnings)
     binding = schema["binding"][party.provider]
+    catalog = binding.get("model_catalog", [])
+    if not isinstance(catalog, list) or any(not isinstance(item, dict) for item in catalog):
+        raise RenderError("binding model_catalog must be a list of tables")
+    catalog_ids = {item.get("id") for item in catalog if isinstance(item.get("id"), str)}
+    agent_aliases = binding.get("agent_aliases", [])
+    if not isinstance(agent_aliases, list):
+        raise RenderError("binding agent_aliases must be a list")
+    alias_names: set[str] = set()
+    source_role_keys = {role.role for role in party.agent_roles()}
+    for alias in agent_aliases:
+        if not isinstance(alias, dict):
+            raise RenderError("agent_aliases entries must be tables")
+        source_role, alias_name, model = alias.get("source_role"), alias.get("name"), alias.get("model")
+        effort = alias.get("effort")
+        if not isinstance(source_role, str) or source_role not in source_role_keys or not isinstance(alias_name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", alias_name) or not isinstance(model, str) or not model:
+            raise RenderError("agent_aliases entries require an agent source_role and slug name/model strings")
+        if alias_name in alias_names:
+            raise RenderError(f"duplicate agent alias name {alias_name!r}")
+        alias_names.add(alias_name)
+        if model not in catalog_ids:
+            raise RenderError(f"agent alias {alias_name!r} model {model!r} is absent from model_catalog")
+        if effort is not None and effort not in binding.get("effort_map", {}):
+            raise RenderError(f"agent alias {alias_name!r} uses unknown effort {effort!r}")
+        if effort is None and _model_supports_effort(binding, model):
+            raise RenderError(f"agent alias {alias_name!r} must declare an effort for reasoning model {model!r}")
+        if effort is not None and not _model_supports_effort(binding, model):
+            raise RenderError(f"agent alias {alias_name!r} cannot set effort for no-reasoning model {model!r}")
+    rendered_names: set[str] = set()
     for r in party.agent_roles():
         description, body, _ = _source(r.name)
         stem = _stem(schema, "opencode", party, r)
+        if stem in rendered_names:
+            raise RenderError(f"duplicate OpenCode agent stem {stem!r}")
+        rendered_names.add(stem)
         arts.append(Artifact(agent_dir / f"{stem}.md", _opencode_frontmatter(schema, party, r, description, stem) + body, "file"))
+
+        for alias in agent_aliases:
+            if alias["source_role"] != r.role:
+                continue
+            alias_name, model = alias.get("name"), alias.get("model")
+            effort = alias.get("effort", r.effort)
+            clone = RoleSetting(**{
+                **r.__dict__, "role": f"{r.role}_{alias_name}", "name": alias_name,
+                "model": model, "effort": effort,
+                "effort_value": binding["effort_map"][effort], "squashed_into": None,
+            })
+            alias_stem = _stem(schema, "opencode", party, clone)
+            if alias_stem in rendered_names:
+                raise RenderError(f"duplicate OpenCode agent stem {alias_stem!r}")
+            rendered_names.add(alias_stem)
+            arts.append(Artifact(agent_dir / f"{alias_stem}.md",
+                                 _opencode_frontmatter(schema, party, clone, description, alias_stem) + body, "file"))
     if party.provider in VARIANT_PROVIDERS:
         models: dict = {}
         for r in party.roles:
@@ -612,6 +662,32 @@ def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
                 else:
                     model_config["reasoning"] = False
                     notes.append(f"opencode: {r.model} does not support thinking; reasoning controls omitted")
+        catalog_ids: set[str] = set()
+        for entry in catalog:
+            model, name = entry.get("id"), entry.get("name")
+            reasoning = entry.get("reasoning")
+            if not isinstance(model, str) or not model or not isinstance(name, str) or not name:
+                raise RenderError("model_catalog entries require non-empty id and name strings")
+            if model in catalog_ids or model in models:
+                raise RenderError(f"duplicate OpenCode model catalog id {model!r}")
+            catalog_ids.add(model)
+            if not isinstance(reasoning, bool):
+                raise RenderError(f"model_catalog entry {model!r} requires a boolean reasoning field")
+            if reasoning != _model_supports_effort(binding, model):
+                raise RenderError(f"model_catalog entry {model!r} conflicts with no_reasoning_models")
+            context, output = entry.get("context"), entry.get("output")
+            if not isinstance(context, int) or context <= 0 or not isinstance(output, int) or output <= 0:
+                raise RenderError(f"model_catalog entry {model!r} requires positive integer context and output limits")
+            model_config = {"name": name, "reasoning": reasoning, "variants": {},
+                            "limit": {"context": context, "output": output}}
+            if reasoning:
+                effort = entry.get("effort")
+                if effort not in binding.get("effort_map", {}):
+                    raise RenderError(f"reasoning model {model!r} requires a declared effort from effort_map")
+                model_config["variants"][f"party_{effort}"] = _opencode_variant(model, binding["effort_map"][effort])
+            elif "effort" in entry:
+                raise RenderError(f"no-reasoning model {model!r} must omit effort")
+            models[model] = model_config
         arts.append(Artifact(config, json.dumps({"provider": {party.provider: {"models": models}}}), "jsonmerge",
                              owned_prefix="party_"))
     else:

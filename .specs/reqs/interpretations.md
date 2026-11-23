@@ -1,9 +1,18 @@
-## CURRENT 2026-11-22 — Nemotron Oracle has no thinking control
+## CURRENT 2026-11-22 — One Qwopus Oracle route across OpenCode and Claude Code
+
+- Decision: Route the sole `party-oracle` alias to the existing `qwopus3.5-reasoning-128k:4b` Ollama model at medium reasoning effort. Keep `party-leader` on the same model at low effort. Remove every additional `party-oracle-*` alias from the LiteLLM and OpenCode catalogs; Claude Code must discover the same sole alias through OxenHitch's LiteLLM catalog. Preserve each role's existing tools and permissions. Qwen3-VL models, when exposed, remain standalone `qwen3-vl-*` model IDs and never use a `party-oracle-*` alias.
+- Basis: The user selected the exact Jackrong Qwopus3.5 4B MTP GGUF for Oracle and clarified that Leader uses this same model at low effort. `ollama show --modelfile` reports the same underlying blob hash for the exact Jackrong tag and the existing derived Qwopus role tag; the derived tag also carries the 131,072 context and working reasoning template.
+- Acceptance: LiteLLM lists one Oracle alias (`party-oracle`) whose upstream is `qwopus3.5-reasoning-128k:4b` with medium effort; `party-leader` remains on that upstream at low effort. OpenCode exports only `party-oracle` as the Oracle model and configures medium effort. After Hitch refreshes the LiteLLM catalog, Claude Code offers and routes that same alias, with no other `party-oracle-*` entries.
+- Runtime status (2026-11-22 20:33): LiteLLM lists exactly `party-oracle`; `/model/info` maps it to `qwopus3.5-reasoning-128k:4b` with `reasoning_effort: medium` and a 131072 input cap. Direct LiteLLM, OpenCode with `party_medium`, and Claude Code through `hitch-claude.bat` using Hitch’s generated wire alias returned their canaries. Hitch persisted state still selects and catalogs `party-oracle-gemma-q4`; refresh via Hitch Models → Refresh models and verify the stale alias disappears.
+- Unverified: The bundled runner recognizes `draft-mtp`, but the observed Qwopus runner launch omitted speculative mode; this route change does not claim MTP is active.
+- Supersedes the Nemotron Oracle decision below; the prior deployment evidence remains in [oracle-route-2026-11-22.md](../../docs/playbooks/history/oracle-route-2026-11-22.md).
+
+## SUPERSEDED 2026-11-22 — Nemotron Oracle had no thinking control
 
 - Decision: Preserve `party-oracle`, the exact Nemotron tag, its 65,536 context cap, and OpenCode's read-only permissions. Omit reasoning-effort and thinking fields for this alias because the model rejects them.
-- Basis: The LiteLLM `:4000` endpoint lists `party-oracle`; its active `/model/info` still reports `extra_body.reasoning_effort=low`. A no-reasoning `/v1/chat/completions` request returned HTTP 400 `does not support thinkingNo`. The saved LiteLLM config omits the field, establishing a stale active deployment. The OpenCode catalog is `reasoning: false` with no effort variant, and the saved route targets the exact Nemotron tag.
-- Status: After the user restarted the service, `:4000/v1/models` listed `party-oracle`; `/model/info` showed the exact E4B tag and no reasoning fields; no-reasoning inference returned HTTP 200 with non-empty output. OpenCode was re-exported and returned `OPENCODE_NEMOTRON_OK` through `party-oracle`. Hitch already selects/catalogs `party-oracle` and exposes it to Claude with label `party-oracle` over an opaque `claude-model-…` wire ID; no separate model registration is needed. Claude Code through the existing `.bat` returned `CLAUDE_CODE_NEMOTRON_OK` with a bare/minimal prompt; its default 64,152-token prompt exceeds the reported 49,152-token context limit.
-- History: The prior low-effort route decision is preserved in [oracle-route-2026-11-22.md](../../docs/playbooks/history/oracle-route-2026-11-22.md).
+- Basis: The LiteLLM `:4000` endpoint listed `party-oracle`; its active `/model/info` still reported `extra_body.reasoning_effort=low`. A no-reasoning request returned HTTP 400 `does not support thinkingNo`. The saved LiteLLM config omitted the field, establishing a stale active deployment.
+- Status: After restart, `/v1/models` listed `party-oracle`; `/model/info` showed the E4B tag without reasoning fields; no-reasoning inference returned HTTP 200. OpenCode and Claude Code were each confirmed with short canary requests. This disposition is now superseded by the user's Qwopus route selection.
+- History: The prior route record is preserved in [oracle-route-2026-11-22.md](../../docs/playbooks/history/oracle-route-2026-11-22.md).
 
 # Current interpretations
 

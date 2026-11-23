@@ -67,6 +67,18 @@ python ~/.harness/plugin/install.py --all
 
 The key insight: **scripts are harness-agnostic** (stdin JSON, stdout JSON). Only the *wiring* layer (how hooks get registered) is harness-specific. The installer handles that translation.
 
+## Optional canonical rules overlay
+
+`adapter.py` can export the scoped rules authored in `~/.rules` as a target-native plugin, separately from this SDD plugin bundle. Base instruction export remains the default; `--plugin` previews the overlay and `--plugin --apply` publishes and activates it:
+
+```powershell
+python ~/.harness/adapter.py --target instructions --client opencode --plugin
+python ~/.harness/adapter.py --target instructions --client opencode --plugin --apply
+python ~/.harness/adapter.py --target instructions --client claude --plugin --apply
+```
+
+OpenCode and Claude Code CLI are the verified native-loader routes. Isolated checks confirmed OpenCode rule injection and Claude Code `UserPromptSubmit` context injection; the Claude response-level check remains unverified because the local Hitch gateway rejected the temporary model alias. The exporter keeps plugin artifacts under a separate ownership record, preserves base instructions, and refuses unsupported targets rather than silently writing a base file. The Claude Code package is not automatically installed into the Claude Desktop/Cowork account plugin UI; use that UI's local-plugin import flow separately if that is the intended runtime.
+
 ## Prerequisites
 
 MCP services must be running before any agent session uses them:

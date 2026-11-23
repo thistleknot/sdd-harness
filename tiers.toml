@@ -54,14 +54,14 @@ label       = "drafter"
 demand      = "med"
 purpose     = "Drafting from an existing plan; cross-model repair when L1 is exhausted."
 escalates_to = "L3"
-note        = "Reached by escalation, not by default. No role binds here since the ladder was retired (2026-10-08); kept for providers with a distinct second brain."
+note        = "A provider may use L2 for a distinct worker route; role assignments are controlled by [role], not forced through an escalation ladder."
 
 [tier.L3]
 label       = "planner"
 demand      = "high"
-purpose     = "Planning, architecture, cross-file judgment. Produces specs, never code."
+purpose     = "High-uncertainty planning and architecture, cross-file judgment, or an explicitly assigned bounded fix."
 escalates_to = ""          # terminal
-note        = "Bounded to two re-plan rounds total (orchestration.md)."
+note        = "Terminal escalation tier; the Oracle may consult or implement an explicitly scoped fix."
 
 # ---------------------------------------------------------------- roles
 #
@@ -73,10 +73,10 @@ note        = "Bounded to two re-plan rounds total (orchestration.md)."
 
 [role.leader]
 tier      = "L1"
-reasoning = "medium"
-ceiling   = "high"
+reasoning = "low"
+ceiling   = "low"
 kind      = "session"
-gate      = "none"          # Leader: plans, writes the contract, resolves low-level spec bugs, calls the Oracle only when stuck
+gate      = "none"          # Leader owns the plan and acceptance; may fix directly or route to another role when useful
 tools     = []
 name      = "leader"
 
@@ -89,19 +89,19 @@ tools     = ["Read", "Grep", "Glob"]
 name      = "reader"
 
 [role.doer]
-tier      = "L1"
+tier      = "L2"
 reasoning = "low"
-ceiling   = "medium"
+ceiling   = "low"
 gate      = "none"          # Fighters (a team): fill the bodies of a file set to the Leader's contract; a failure returns as a bug report
 tools     = ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
 name      = "doer"
 
 [role.oracle]
 tier      = "L3"
-reasoning = "high"
-ceiling   = "high"
-gate      = "escalate"      # Oracle returns an evidence-backed plan to Leader; Leader owns artifacts and Fighter dispatch
-tools     = ["Read", "Grep", "Glob"]
+reasoning = "medium"
+ceiling   = "medium"
+gate      = "escalate"      # Oracle handles consults or assigned fixes; no recursive delegation
+tools     = ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
 name      = "oracle"
 
 # ---------------------------------------------------------------- providers
@@ -110,6 +110,8 @@ name      = "oracle"
 # the provider's live model list -- not the date this file was edited. `dial` is the
 # ordered list of [tier, effort] steps, weakest first; a role pins to one step and a
 # window [lo, hi] clamps roles into a sub-range.
+
+[binding]
 
 [binding.anthropic]
 L0       = "claude-haiku-5-5"
@@ -126,13 +128,13 @@ note     = "OPERATOR 2026-10-17: reader Haiku 5.5 low; doer (coder) Haiku 5.5 me
 L0       = "gpt-5.4-mini"
 L1       = "gpt-5.4"
 L2       = "gpt-5.4"
-L3       = "gpt-6.1-sol"
+L3       = "gpt-6.2-sol"
 L3_alt   = "gpt-6.5-tierra"             # comparable to L3; either may fill the heavy tier
 resolved = "2026-10-08"
 effort_key = "model_reasoning_effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
 dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L1", "high"], ["L3", "medium"], ["L3", "high"]]
-note     = "UNVERIFIED: ids supplied by operator. Probe 2026-10-08: the localhost:4000 proxy the live Codex config points at does NOT list gpt-5.4 (or any of these ids), so a `codex exec` probe must pass before any id here counts as verified. Operator preference: gpt-5.4 at low and medium effort for coding and orchestration; gpt-6.1-sol and gpt-6.5-tierra are comparable and both count as the high tier."
+note     = "UNVERIFIED: ids supplied by operator. Probe 2026-10-08: the localhost:4000 proxy the live Codex config points at does NOT list gpt-5.4 (or any of these ids), so a `codex exec` probe must pass before any id here counts as verified. Operator preference: gpt-5.4 at low and medium effort for coding and orchestration; gpt-6.2-sol is the OpenAI Oracle at L3 high effort. L3_alt remains gpt-6.5-tierra as an available alternative, not the active Oracle binding."
 
 # OpenRouter: one endpoint, many vendors. A role is pinned to a tier and an effort, never
 # to a model: the harness takes the first AVAILABLE model in the tier's candidate list
@@ -164,7 +166,7 @@ resolved = "2026-11-20"
 effort_key = "reasoning_effort"
 effort_map = { low = "low", medium = "medium", high = "high" }
 dial     = [["L0", "low"], ["L1", "low"], ["L1", "medium"], ["L3", "high"]]
-note     = "OPERATOR 2026-11-20: local role roster is Scout=L0 Qwen3.5 2B low, Leader/Fighter=L1 Qwen3.5 4B medium/low, Oracle=L3 Qwen3.8 9B Opus distill Q6_K high (OpenCode requests xhigh). Oracle uses qwen38-9b-oracle:128k with num_ctx 131072; its OpenCode output cap is 768. Oracle is read-only and returns plans to Leader; Leader owns Fighter dispatch. OpenCode's route, permission, and output contracts are in ~/.config/opencode/litellm-routing.spec.md. Output caps do not establish effort execution. Supersedes the 2026-11-19 Qwen3.8 27B Oracle route."
+note     = "OPERATOR 2026-11-20: local role roster is Scout=L0 Qwen3.5 2B low, Leader/Fighter=L1 Qwen3.5 4B medium/low, Oracle=L3 Qwen3.8 9B Opus distill Q6_K high (OpenCode requests xhigh). Oracle uses qwen38-9b-oracle:128k with num_ctx 131072; its OpenCode output cap is 768. Oracle can consult or implement an explicitly scoped fix; Leader owns integration and acceptance. OpenCode's route, permission, and output contracts are in ~/.config/opencode/litellm-routing.spec.md. Output caps do not establish effort execution. Supersedes the 2026-11-19 Qwen3.8 27B Oracle route."
 
 [binding.ollama.candidates]
 light = ["qwen35-oc-2b-128k:latest", "qwen35-oc-4b-128k:latest"]
@@ -193,6 +195,20 @@ note     = "UNBOUND: numeric thinking budget, not an enum. gemini CLI is not ins
 # `verified` lists the providers whose template passed a LIVE probe (not just unit tests); the
 # generated headers say "UNVERIFIED" for any provider not listed. Evidence is in manifest.toml.
 
+[binding.litellm]
+L0 = "party-scout"
+L1 = "party-leader"
+L3 = "party-oracle"
+resolved = "2026-11-22"
+base_url = "http://127.0.0.1:4000/v1"
+effort_key = "reasoning.effort"
+dial = [["L0", "low"], ["L1", "low"], ["L2", "low"], ["L3", "low"]]
+note = "Confirmed local mapping: Scout and Fighter use Kestrel 4B Coder at low through separate role aliases; Leader uses Qwopus3.5 4B v3 MTP at low; Oracle uses NVIDIA Nemotron 3.5 Bolt E4B Q4_K_M at low with a 65536 context cap. Oracle inference behavior is not yet verified."
+L2 = "party-fighter"
+
+[binding.litellm.effort_map]
+low = "low"
+medium = "medium"
 [harness.claude]
 providers  = ["anthropic"]
 model_fmt  = "{id}"
@@ -210,7 +226,7 @@ config     = "~/.codex/config.toml"     # named profiles render to sibling *.con
 provider_refs = { openai = "copilot-proxy", ollama = "copilot-proxy" }
 
 [harness.opencode]
-providers  = ["openrouter"]   # 2026-11-07: ollama dropped - opencode is OpenRouter-only; the solo party (one model, three roles) is the whole roster
+providers  = ["litellm", "openrouter"]   # 2026-11-07: ollama dropped - opencode is OpenRouter-only; the solo party (one model, three roles) is the whole roster
 model_fmt  = "{provider}/{id}"
 agent_dir  = "~/.config/opencode/agents"
 config     = "~/.config/opencode/opencode.json"
@@ -224,7 +240,7 @@ config     = "~/.config/opencode/opencode.json"
 # injection). Orphaned but harmless: ~/.config/opencode/oh-my-opencode-slim.json{,c}
 # and storage/oh-my-opencode-slim/tui-state.json (skills master still syncs them;
 # not loaded while the plugin is out of the array).
-verified   = ["openrouter"]   # `opencode debug agent` AND `opencode run` PONG, 2026-10-08; 2026-11-07 PONG3 native, no plugin
+verified   = ["litellm", "openrouter"]   # `opencode debug agent` AND `opencode run` PONG, 2026-10-08; 2026-11-07 PONG3 native, no plugin
 
 [harness.pi]
 providers  = ["ollama", "openrouter"]
@@ -244,6 +260,7 @@ doc        = "~/.gemini/GEMINI.md"
 
 [harness.hermes]
 providers  = []
+model_provider = "litellm"
 doc        = "~/AppData/Local/hermes/SOUL.md"
 
 # ---------------------------------------------------------------- scorers

@@ -1,13 +1,14 @@
 """| Stage | Mechanism | Tag | Requirements |
 |---|---|---|---|
 | FIXTURE | Isolate Codex home, harness root, and representative config contents | [mandatory] | R1 |
-| PROJECT | Render each harness party into native artifacts | [mandatory] | R1 |
+| PROJECT | Render each harness party into native artifacts | [mandatory] | R1, R11 |
 | MIGRATE | Verify Codex profile files replace only the generated legacy marker block | [mandatory] | R9, REQ #118 |
 | VERIFY | Parse formats, preserve unmanaged settings, and confirm repeatability | [mandatory] | R1, R9 |
 
 R1: WHEN a party render test runs, filesystem writes MUST stay inside its temporary fixture.
 R9: WHEN Codex party roles render, tests MUST verify separate top-level profile files, safe legacy migration, and preservation of unmanaged profile/config values.
 R10: WHEN OpenCode Oracle role instructions render, tests MUST verify native inline-task compatibility and that packet files are not required unless the caller names that protocol.
+R11: WHEN the Codex OpenAI party renders, the Oracle profile MUST use the configured OpenAI L3 model at high reasoning effort.
 
 Tests for the party renderers in render_agents.py (claude, codex, opencode, pi, docs, CLI).
 
@@ -115,7 +116,7 @@ def test_codex_agent_files_are_valid_toml_with_the_documented_keys(schema, home)
     arts = by_name(ra.render_party(schema, "codex", "openai").artifacts)
     for role, model, effort, sandbox in [("reader", "gpt-5.4-mini", "low", "read-only"),
                                          ("doer", "gpt-5.4-mini", "low", "workspace-write"),
-                                         ("oracle", "gpt-6.1-sol", "high", "workspace-write")]:
+                                         ("oracle", "gpt-6.2-sol", "high", "workspace-write")]:
         text = arts[f"{role}-openai.toml"].text
         data = tomllib.loads(text)
         assert set(data) == {"name", "description", "model", "model_reasoning_effort", "sandbox_mode",
@@ -144,7 +145,7 @@ def test_codex_named_profile_files_use_flat_native_settings(schema, home):
     arts = by_name(ra.render_party(schema, "codex", "openai").artifacts)
     profile = tomllib.loads(arts["party_oracle_openai.config.toml"].text)
     assert profile == {
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.2-sol",
         "model_provider": "copilot-proxy",
         "model_reasoning_effort": "high",
     }
@@ -308,6 +309,19 @@ def test_opencode_oracle_accepts_native_inline_task_handoff(schema, home):
     assert "names a packet-based protocol." in oracle
 
 
+def test_litellm_oracle_fix_mode_projects_write_tools_without_widening_scout(schema, home):
+    arts = by_name(ra.render_party(schema, "opencode", "litellm").artifacts)
+    oracle_text = arts["oracle-litellm.md"].text
+    oracle = frontmatter(oracle_text)
+    scout = frontmatter(arts["reader-litellm.md"].text)
+
+    assert oracle["permission"]["edit"] == oracle["permission"]["bash"] == "allow"
+    assert oracle["permission"]["subtask"] == "deny"
+    assert "Consult mode" in oracle_text and "Fix mode" in oracle_text
+    assert scout["permission"]["read"] == "allow"
+    assert scout["permission"]["edit"] == scout["permission"]["bash"] == "deny"
+
+
 # ---- pi --------------------------------------------------------------------------------
 
 def _pi_models(home: Path, provider: str, ids: list) -> None:
@@ -325,8 +339,8 @@ def test_pi_agents_use_thinking_and_a_tools_allowlist(schema, home):
     assert tools(reader) == {"read", "grep", "find", "ls"} and reader["thinking"] == "low"
     assert reader["model"] == "ollama/qwen3.5-oc:2b"
     assert tools(doer) == {"read", "grep", "find", "ls", "bash", "edit", "write"} and doer["thinking"] == "low"
-    assert tools(oracle) == {"read", "bash", "grep", "find", "ls", "write"} and oracle["thinking"] == "high"
-    assert "edit" not in tools(oracle)
+    assert tools(oracle) == {"read", "bash", "grep", "find", "ls", "edit", "write"} and oracle["thinking"] == "high"
+    assert "Consult" in arts["oracle-ollama.md"].text and "Fix mode" in arts["oracle-ollama.md"].text
     assert (doer["systemPromptMode"], doer["defaultContext"], doer["inheritSkills"]) == ("replace", "fork", False)
     assert not [n for n in out.notes if n.startswith("SKIP")]
 

@@ -1,4 +1,28 @@
+## CURRENT 2026-11-22 — Shared party-oracle target
+
+- Decision: Preserve the stable `party-oracle` alias and point it to the exact pulled NVIDIA Nemotron 3.5 Bolt E4B Q4_K_M tag through LiteLLM; set the Oracle effort to low and keep its 65,536 context cap. Preserve all other role aliases and Oracle's read-only permissions.
+- Basis: The request names the new shared party-oracle and low thinking; Ollama confirms the exact tag is present and reports its 65,536 context. Keeping the alias avoids client-specific route changes.
+- Status: LiteLLM was restarted; readiness is healthy, the `party-oracle` alias is listed, and `/model/info` reports the exact Nemotron Ollama target. No inference request has been sent, so tool use and effective reasoning behavior remain unverified.
 # Current interpretations
+
+## CURRENT 2026-11-22 — Hermes is a native party-model target
+
+- Decision: Make Hermes model projection part of `adapter.py --target hermes`, with `tiers.toml` as the single role/model source and Hermes' own configuration API as the writer. Set the Leader's LiteLLM alias as the new-session default, the Fighter's alias as the generic delegated-child route, and publish `leader`, `fighter`, `scout`, and `oracle` model aliases for direct selection. Keep `--plugin` scoped to the separate rules-plugin export.
+- Basis: A model roster written only into `SOUL.md` does not change the Hermes model route. Hermes' native default delegation provider exposes one model route for every child, so the ordinary adapter can set one Fighter default and selectable role aliases but cannot claim automatic Scout/Oracle child routing.
+- Evidence: `tiers.toml` `[binding.litellm]` contains all four party aliases; the Hermes adapter now uses Hermes' native save API, snapshots, and config-path resolution. Two `python adapter.py --target hermes` runs changed the party once, then reported zero changes and no snapshot. Native readback showed `model.default=party-leader`, `delegation.model=party-fighter`, and all four aliases; four direct 4B alias requests returned their expected canaries, and `hermes -z` returned `HERMES_4B_OK`. The first CLI probe waited for an existing Hermes update lock to clear, then passed. The active native config path is `C:\Users\user\AppData\Local\hermes\config.yaml` because `HERMES_HOME` resolves there; `C:\Users\user\.hermes` currently contains only `skills`, so adapter writes follow Hermes' resolved runtime path.
+
+## CURRENT 2026-11-22 — Generic plugin export and direct Oracle fixes
+
+- Decision: Treat `plan-todo` as the available `plan-do` workflow because retrieval returned `plan-do` and no standalone `plan-todo`. Keep `~/.rules` and the existing adapter/RuleStore as the rule source and publisher. Without `--plugin`, preserve the current base managed-block export. With `--plugin --apply`, export and activate the selected target's native rules plugin while preserving base rule bytes and unrelated settings. Claude Code and OpenCode are the first target-specific routes; unsupported plugin targets stop without falling back to base publication.
+- Decision: Keep Leader, Fighter, Scout, and Oracle as role contracts over the existing party resolver. Leader may directly perform a bounded fix; Oracle supports separate consult and assigned-fix modes and may implement its assigned repair without another Fighter handoff; Scout remains read-only. Every action stays within the role's explicit native tools and assigned scope; no role label alone forces a context switch.
+- Basis: The user requested a target-generic `adapter.py --plugin` mode and stated that an escalated model should be able to finish the fix when that avoids an unnecessary handoff. Existing `sync_instructions()` already owns audience selection and RuleStore publication, while the target adapters have different plugin loaders, so support must be established per native target.
+- Evidence: Project requirements #18-#25 in `.specs/reqs/requirements.db`; EARS validation passed for #18-#25; Oracle consultations and source inspection of the incumbent routes; official Claude Code plugin documentation and installed CLI checks. Cowork/Desktop plugin compatibility is not established.
+
+## CURRENT 2026-11-21 — One SSH sync entry point for Claude and Codex
+
+- Decision: Extend `sync-to-remote.ps1` with `-Harness` selection for Claude, Codex, or both; default to both. Keep one SSH sync script. Move `route_instructions.py` from RL_V2's project hooks into `~/.claude/hooks`, register it in global Claude settings, and have the sync merge that managed handler while preserving all unrelated remote settings and hooks. Export Codex's global `AGENTS.md`, its `.tessl/RULES.md` dependency, and all selected packages in `~/.agents/skills`; preserve client configuration and credentials.
+- Basis: The operator wants one SSH sync script for multiple harnesses and the global hook fails when its project-specific path is unavailable. The route hook uses `CLAUDE_PROJECT_DIR` to read the active project's `instructions.md`, so it belongs under the Claude home while its context remains project-scoped. Remote inspection found Codex CLI 0.171.0 and its existing `/root/.codex/config.toml` and auth, but no `/root/.codex/AGENTS.md`, `/root/.agents/skills`, or `/root/.tessl/RULES.md`. The local native skill projection contains 29 selected packages.
+- Evidence: Local/remote filesystem and CLI probes; `sync-to-remote.ps1`; `adapter.py` Codex native skill target contract; local global-hook invocation; completed both-harness sync; remote settings comparison against the pre-merge backup; three remote hook cases covering instructions, spaces in the project path, and absent instructions; Codex `AGENTS.md` and `.tessl/RULES.md` SHA-256 matched local files, and 29 skill files passed readback.
 
 ## CURRENT 2026-11-21 — Context assembly in the shared instruction export
 
@@ -11,11 +35,9 @@
 - Decision: Put the four-part request frame (Role/persona, Task/goal, Context/requirements/input with falsifiable evidence, Format/instructions/output) under the Operating Contract in the canonical operating rule and both live Claude/Codex instructions; retain the existing next-step rule from Codex. Do not merge Claude's 30-second command cutoff or sandbox-bypass instruction.
 - Basis: The operator explicitly requested this frame for any incoming request. Live-copy comparison found the Codex next-step rule absent from the canonical Operating Contract; the 30-second cutoff conflicts with the current bounded-test policy, and the sandbox-bypass instruction conflicts with current permission controls. The live documents have no instruction-registry markers, so direct edits avoid appending a duplicate full registry view.
 
-## CURRENT 2026-11-21 — Remote Claude runtime payload
+## SUPERSEDED 2026-11-21 — Claude-only remote payload
 
-- Decision: Extend `sync-to-remote.ps1` to include `.rules/`, `.skills/GLOSSARY.md`, `.skills/plan-do/` and its referenced `task-breakdown` skill both at `~/.skills` and under Claude's native `~/.claude/skills`, `.harness/constitution.md`, `.harness/rules/`, and `.harness/hooks/plan_do_route.py` with `_common.py`; keep `.claude/settings.json` out of the payload.
-- Basis: The operator requires remote Claude to receive the support files its own instructions expect. SSH inspection confirmed the plan-do skill and router hook were absent. The skill master contains 42,649 files and is 5.26 GB, so copying all of it is not necessary when only the named package and glossary are runtime dependencies. Existing settings contain Windows paths and Windows-only integrations, so copying them would create invalid remote hook commands.
-- Supersedes: R22's former blanket exclusion of `.rules`, `.skills`, and `.harness` support. The prior wording is preserved in [the dated history](../../docs/playbooks/history/memory-and-harness-integration-2026-11-21.md).
+Superseded by the multi-harness SSH sync decision above; prior basis is preserved in [dated history](../../docs/playbooks/history/memory-and-harness-integration-2026-11-21.md).
 
 ## CURRENT 2026-11-18 — Canonical instruction source and publication views
 

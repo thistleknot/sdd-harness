@@ -294,7 +294,7 @@ harness  = "opencode"
 strategy = "GENERATE"
 target   = "C:/Users/user/.config/opencode/agents"
 emit     = "<role>-<provider>.md (model, mode, permission map) plus reasoning variants merged into opencode.json"
-note     = "Never touches oh-my-opencode-slim.json (plugin uninstalled 2026-11-07; the file is orphaned). The agent renderer still supports OpenRouter only; it does not project the active LiteLLM party-* routes. Current global OpenCode model bindings are maintained in ~/.config/opencode/opencode.json and specified by litellm-routing.spec.md; ~/.harness/tiers.toml is the role and local-model roster. Do not claim the generated OpenRouter lanes represent the active OpenCode configuration. Adding a LiteLLM renderer is a separate change."
+note     = "Never touches oh-my-opencode-slim.json (plugin uninstalled 2026-11-07; the file is orphaned). The agent renderer projects the LiteLLM and OpenRouter role bindings from ~/.harness/tiers.toml. The local OpenCode catalog labels and role variants are maintained in ~/.config/opencode/opencode.json; the LiteLLM role IDs and targets are specified by litellm-routing.spec.md."
 
 [[cell]]
 artifact = "agents"

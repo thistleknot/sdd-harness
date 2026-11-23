@@ -34,6 +34,9 @@ files, or non-idempotent generation fail assertions.
 from __future__ import annotations
 
 import json
+import sqlite3
+import subprocess
+import ast
 from pathlib import Path
 from unittest.mock import patch
 
@@ -57,6 +60,9 @@ from adapter import (
     sync_kiro,
     sync_opencode,
     sync_vscode,
+    sync_instruction_plugins,
+    _render_opencode_rule_plugin,
+    _render_claude_rule_plugin,
 )
 from instructions.rules import RuleStore
 
@@ -350,7 +356,7 @@ def test_codex_context_route_preserves_role_and_provider_settings(model_id, conf
         'wire_api = "responses"\n'
         'env_key = "CODEX_GATEWAY_API_KEY"\n'
         '\n[profiles.party_oracle_openai]\n'
-        'model = "gpt-6.1-sol"\nmodel_provider = "copilot-proxy"\n',
+        'model = "gpt-6.2-sol"\nmodel_provider = "copilot-proxy"\n',
         encoding="utf-8",
     )
     proxy = {
@@ -367,7 +373,7 @@ def test_codex_context_route_preserves_role_and_provider_settings(model_id, conf
     assert projected["model_providers"]["copilot-proxy"]["base_url"] == proxy["proxy_url"]
     assert projected["model_providers"]["copilot-proxy"]["wire_api"] == "responses"
     assert projected["model_providers"]["copilot-proxy"]["env_key"] == "CODEX_GATEWAY_API_KEY"
-    assert projected["profiles"]["party_oracle_openai"]["model"] == "gpt-6.1-sol"
+    assert projected["profiles"]["party_oracle_openai"]["model"] == "gpt-6.2-sol"
     assert "# shared local gateway" in text
     assert not _project_codex_provider_route(cfg, proxy)
 
@@ -587,6 +593,243 @@ def test_sync_agents_plans_by_default_and_applies_only_when_asked(monkeypatch):
     assert seen == [["--harness", "all", "--plan"], ["--harness", "all", "--apply"]]
 
 
+def _plugin_rule_source(root: Path, audience: str = "opencode") -> Path:
+    """Create one explicitly scoped canonical rule fixture."""
+    source = root / "rules"
+    source.mkdir()
+    (source / "100-rule.md").write_text(
+        f"---\nharnesses: [{audience}]\norder: 100\n---\n# Marker\nplugin-rule-marker\n",
+        encoding="utf-8",
+    )
+    return source
+
+
+def test_instruction_plugin_preview_is_read_only(tmp_path, capsys):
+    source = _plugin_rule_source(tmp_path)
+    database = tmp_path / "rules.sqlite"
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    assert sync_instruction_plugins(clients=["opencode"], source_dir=source, database=database) == 0
+
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before
+    assert not database.exists()
+    assert "would_write" in capsys.readouterr().out
+
+
+def test_instruction_plugin_without_client_previews_every_verified_route(tmp_path, capsys):
+    source = _plugin_rule_source(tmp_path, "claude, opencode")
+    database = tmp_path / "rules.sqlite"
+
+    assert sync_instruction_plugins(source_dir=source, database=database) == 0
+
+    output = capsys.readouterr().out
+    assert "claude: would_write" in output
+    assert "opencode: would_write" in output
+    assert not database.exists()
+    assert not list(tmp_path.rglob("*.js"))
+    assert not list(tmp_path.rglob("rules.py"))
+
+
+def test_instruction_plugin_unsupported_target_has_no_fallback(tmp_path, capsys):
+    source = _plugin_rule_source(tmp_path, "copilot")
+    database = tmp_path / "rules.sqlite"
+
+    assert sync_instruction_plugins(clients=["copilot"], apply=True, source_dir=source, database=database) == 1
+
+    assert not database.exists()
+    assert not (tmp_path / ".copilot" / "instructions" / "harness-rules.instructions.md").exists()
+    assert "no base export attempted" in capsys.readouterr().out
+
+
+def test_instruction_plugin_cli_routes_apply_to_plugin_export(monkeypatch):
+    import adapter
+
+    seen = []
+    monkeypatch.setattr(adapter, "sync_instruction_plugins", lambda **kwargs: seen.append(kwargs) or 0)
+    monkeypatch.setattr("sys.argv", ["adapter.py", "--target", "instructions", "--client", "opencode", "--plugin", "--apply"])
+
+    with pytest.raises(SystemExit) as exit_status:
+        adapter.main()
+
+    assert exit_status.value.code == 0
+    assert seen == [{"clients": ["opencode"], "apply": True}]
+
+
+def test_instruction_cli_without_plugin_keeps_base_export_default(monkeypatch):
+    import adapter
+
+    seen = []
+    monkeypatch.setattr(adapter, "sync_instructions", lambda **kwargs: seen.append(kwargs) or 0)
+    monkeypatch.setattr(adapter, "sync_instruction_plugins", lambda **kwargs: pytest.fail("plugin route selected"))
+    monkeypatch.setattr("sys.argv", ["adapter.py", "--target", "instructions", "--client", "claude"])
+
+    with pytest.raises(SystemExit) as exit_status:
+        adapter.main()
+
+    assert exit_status.value.code == 0
+    assert seen == [{"clients": ["claude"], "apply": False, "map_baseline": False}]
+
+
+def test_opencode_instruction_plugin_runtime_hook_preserves_system_prompt(tmp_path):
+    source = _plugin_rule_source(tmp_path)
+    fragments, _ = __import__("adapter")._instruction_fragments(source)
+    plugin = tmp_path / "harness-rules.js"
+    plugin.write_bytes(_render_opencode_rule_plugin(fragments))
+    probe = (
+        f"const p=require({json.dumps(str(plugin))});"
+        "(async()=>{const h=await p.server({});const o={system:['base-system']};"
+        "await h['experimental.chat.system.transform']({},o);console.log(JSON.stringify(o.system));})();"
+    )
+    result = subprocess.run(["node", "-e", probe], capture_output=True, text=True, check=True)
+    injected = json.loads(result.stdout)
+    assert injected[0] == "base-system"
+    assert "plugin-rule-marker" in injected[1]
+
+
+def test_claude_instruction_plugin_preview_is_read_only_and_package_valid(tmp_path, capsys):
+    source = _plugin_rule_source(tmp_path, "claude")
+    database = tmp_path / "rules.sqlite"
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    assert sync_instruction_plugins(clients=["claude"], source_dir=source, database=database) == 0
+
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before and not database.exists()
+    rendered = _render_claude_rule_plugin(__import__("adapter")._instruction_fragments(source)[0])
+    package = tmp_path / "package"
+    for relative, content in rendered.items():
+        if str(relative).startswith("../../"):
+            continue
+        destination = package / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+    validation = subprocess.run(["claude", "plugin", "validate", str(package), "--json"],
+                                capture_output=True, text=True, check=False)
+    assert validation.returncode == 0, validation.stderr
+    assert "would run plugin install --scope user" in capsys.readouterr().out
+
+
+def test_claude_instruction_plugin_chunks_selected_rules_in_hook_order():
+    fragments = [
+        {"body": "a" * 7999 + "\n"},
+        {"body": "b" * 7999 + "\n"},
+        {"body": "c" * 41},
+    ]
+    expected = "\n".join(item["body"].rstrip("\r\n") for item in fragments).rstrip() + "\n"
+    rendered = _render_claude_rule_plugin(fragments)
+    hooks = json.loads(rendered[Path("hooks/hooks.json")])
+    commands = hooks["hooks"]["UserPromptSubmit"]
+    chunks = []
+    for entry in commands:
+        command = entry["hooks"][0]["command"]
+        relative = Path(command.rsplit("/hooks/", 1)[1].rstrip('"'))
+        script = rendered[Path("hooks") / relative].decode("utf-8")
+        assignment = ast.parse(script).body[2]
+        assert isinstance(assignment, ast.Assign)
+        chunk = ast.literal_eval(assignment.value)
+        assert len(chunk) <= 8000
+        chunks.append(chunk)
+    assert "".join(chunks) == expected
+
+
+def test_claude_instruction_plugin_apply_uses_native_user_activation_without_base_mutation(tmp_path, monkeypatch):
+    source = _plugin_rule_source(tmp_path, "claude")
+    database = tmp_path / "rules.sqlite"
+    RuleStore(database)
+    base = tmp_path / ".claude" / "AGENTS.md"
+    base.parent.mkdir(parents=True)
+    base.write_bytes(b"base-rule-bytes")
+    calls = []
+    installed = False
+
+    def fake_cli(args):
+        nonlocal installed
+        calls.append(args)
+        if args == ["list", "--json"]:
+            if not installed:
+                return subprocess.CompletedProcess(args, 0, "[]", "")
+            manifest = json.loads((tmp_path / ".harness" / "plugin-export" / "claude" / "plugins" / "harness-rules" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+            return subprocess.CompletedProcess(args, 0, json.dumps([{
+                "id": "harness-rules@harness-rules-local", "version": manifest["version"],
+                "scope": "user", "enabled": True,
+            }]), "")
+        if args[0] == "install":
+            installed = True
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    monkeypatch.setattr("adapter._run_claude_plugin", fake_cli)
+    assert sync_instruction_plugins(clients=["claude"], apply=True, source_dir=source, database=database) == 0
+    root = tmp_path / ".harness" / "plugin-export" / "claude" / "plugins" / "harness-rules"
+    hook = root / "hooks" / "rules.py"
+    assert b"plugin-rule-marker" in hook.read_bytes()
+    assert (root / ".claude-plugin" / "plugin.json").is_file()
+    assert (root.parent.parent / ".claude-plugin" / "marketplace.json").is_file()
+    assert base.read_bytes() == b"base-rule-bytes"
+    assert ["validate", str(root)] in calls
+    assert any(call[:2] == ["install", "harness-rules"] and "--scope" in call and "user" in call for call in calls)
+    assert ["list", "--json"] in calls
+
+
+def test_instruction_plugin_apply_preserves_base_settings_and_is_idempotent(tmp_path):
+    source = _plugin_rule_source(tmp_path)
+    database = tmp_path / "rules.sqlite"
+    RuleStore(database)
+    base = tmp_path / ".config" / "opencode" / "harness-registry-shared.md"
+    base.parent.mkdir(parents=True)
+    base.write_bytes(b"base-rule-bytes")
+    config = base.parent / "opencode.json"
+    config.write_text(json.dumps({"model": "keep", "plugin": ["existing-plugin"], "mcp": {"keep": {}}}), encoding="utf-8")
+
+    assert sync_instruction_plugins(clients=["opencode"], apply=True, source_dir=source, database=database) == 0
+    plugin_path = base.parent / "plugins" / "harness-rules.js"
+    first_plugin = plugin_path.read_bytes()
+    first_config = json.loads(config.read_text(encoding="utf-8"))
+    assert b"plugin-rule-marker" in first_plugin
+    assert base.read_bytes() == b"base-rule-bytes"
+    assert first_config["model"] == "keep" and first_config["mcp"] == {"keep": {}}
+    assert first_config["plugin"][0] == "existing-plugin"
+    assert first_config["plugin"].count(str(plugin_path)) == 1
+
+    assert sync_instruction_plugins(clients=["opencode"], apply=True, source_dir=source, database=database) == 0
+    assert plugin_path.read_bytes() == first_plugin
+    assert json.loads(config.read_text(encoding="utf-8")) == first_config
+    with sqlite3.connect(database) as db:
+        docs = {row[0] for row in db.execute("SELECT document_id FROM documents")}
+    assert "export-opencode-plugin" in docs
+
+
+def test_claude_instruction_plugin_updates_version_and_reenables_disabled_install(tmp_path, monkeypatch):
+    source = _plugin_rule_source(tmp_path, "claude")
+    database = tmp_path / "rules.sqlite"
+    RuleStore(database)
+    calls = []
+    version = "0.1.0"
+    enabled = False
+
+    def fake_cli(args):
+        nonlocal version, enabled
+        calls.append(args)
+        if args == ["list", "--json"]:
+            return subprocess.CompletedProcess(args, 0, json.dumps([{
+                "id": "harness-rules@harness-rules-local", "version": version,
+                "scope": "user", "enabled": enabled,
+            }]), "")
+        if args[:1] == ["update"]:
+            manifest = json.loads((tmp_path / ".harness" / "plugin-export" / "claude" / "plugins" / "harness-rules" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+            version = manifest["version"]
+        if args[:1] == ["enable"]:
+            enabled = True
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    monkeypatch.setattr("adapter._run_claude_plugin", fake_cli)
+    assert sync_instruction_plugins(clients=["claude"], apply=True, source_dir=source, database=database) == 0
+    assert ["marketplace", "update", "harness-rules-local"] in calls
+    assert any(call[:2] == ["update", "harness-rules@harness-rules-local"] for call in calls)
+    assert any(call[:2] == ["enable", "harness-rules@harness-rules-local"] for call in calls)
+    assert enabled is True
+
+
 GRAPH_HOOKS = [
     {"event": "PreToolUse", "matcher": "Bash|Grep", "command": "g hook-guard search", "timeout": 10},
     {"event": "PreToolUse", "matcher": "Read|Glob", "command": "g hook-guard read", "timeout": 10},
@@ -656,6 +899,11 @@ def test_sync_hermes_uses_native_writer_for_registry_entries(config, tmp_path, m
 
     def fake_run(args, **kwargs):
         calls.append((args, kwargs))
+        if args[-1] == "--party":
+            return subprocess.CompletedProcess(args, 0,
+                '{"default_model": "party-leader", "delegation_model": "party-fighter", '
+                '"aliases": ["leader", "fighter", "scout", "oracle"], '
+                '"changed": true, "snapshot": "fixture-party"}', "")
         return subprocess.CompletedProcess(args, 0,
             '{"configured": ["retrieve-skills", "todo"], "changed": ["todo"], "snapshot": "fixture"}', "")
 
@@ -671,7 +919,34 @@ def test_sync_hermes_uses_native_writer_for_registry_entries(config, tmp_path, m
     }
     assert kwargs["check"] is True and kwargs["capture_output"] is True
     assert kwargs["timeout"] == 300
-    assert "configured 2 servers; changed 1; snapshot verified" in capsys.readouterr().out
+    party_args, party_kwargs = calls[1]
+    assert party_args == [str(python), str(adapter.HERMES_BRIDGE), "--party"]
+    assert json.loads(party_kwargs["input"]) == {
+        "provider": "litellm",
+        "base_url": "http://127.0.0.1:4000/v1",
+        "models": {"leader": "party-leader", "fighter": "party-fighter",
+                   "scout": "party-scout", "oracle": "party-oracle"},
+    }
+    output = capsys.readouterr().out
+    assert "configured 2 servers; changed 1; snapshot verified" in output
+    assert "default=party-leader; delegated=party-fighter; aliases=4; changed=True; snapshot verified" in output
+
+
+def test_hermes_command_resolves_windows_source_virtualenv(tmp_path, monkeypatch):
+    """Require Hermes' bundled executable layout; guarantee its native Python is selected."""
+    import adapter
+
+    home = tmp_path / "hermes-home"
+    executable = home / "bin" / "hermes.exe"
+    interpreter = home / "hermes-agent" / "venv" / "Scripts" / "python.exe"
+    executable.parent.mkdir(parents=True)
+    interpreter.parent.mkdir(parents=True)
+    executable.touch()
+    interpreter.touch()
+    monkeypatch.setattr(adapter.shutil, "which", lambda name: str(executable))
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    assert adapter.hermes_command() == [str(interpreter), str(adapter.HERMES_BRIDGE)]
 
 
 def test_canonical_registry_sync_cannot_reinstall_retired_graphify_hooks(tmp_path):

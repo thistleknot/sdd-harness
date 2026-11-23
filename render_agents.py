@@ -2,14 +2,15 @@
 |---|---|---|---|
 | LOAD | Read role/provider/harness declarations from tiers.toml and agent bodies | [mandatory] | R1 |
 | RESOLVE | Resolve provider bindings and squash roles through party.py | [mandatory] | R1 |
-| PROJECT | Emit native agent files and per-client settings through harness_write artifacts | [mandatory] | R1, REQ #118 |
+| PROJECT | Emit native agent files and per-client settings through harness_write artifacts | [mandatory] | R1, R3, REQ #118 |
 | MIGRATE | Move generated Codex party tables into named profile files and remove their owned marker block | [opt] | REQ #118 |
 | WRITE | Apply only with --apply, backing up every changed destination | [mandatory] | R1 |
 
 R1: WHEN party rendering targets Codex, the system MUST emit each role/provider profile as a top-level ~/.codex/<profile>.config.toml file and remove only generated legacy profile tables from the owned marker block.
 R2: WHEN an OpenCode native task invokes the Oracle role, the projected role MUST accept the inline task prompt and return its result inline; packet files are optional and MUST NOT be required unless the caller names a packet protocol.
+R3: WHEN OpenCode renders the `litellm` provider, every role MUST resolve to its configured LiteLLM model alias and emit its configured reasoning variant in `opencode.json`.
 CLOSED: Embedded [profiles.*] role tables are rejected because Codex CLI 0.134+ requires named profile settings in separate files.
-Preconditions: tiers.toml and declared agent bodies are readable; Codex profiles use supported top-level TOML keys; native task consumers accept inline results.
+Preconditions: tiers.toml and declared agent bodies are readable; Codex profiles use supported top-level TOML keys; native task consumers accept inline results; the OpenCode LiteLLM provider aliases exist in the client config.
 Failure modes: malformed or ambiguous owned profile blocks stop rendering before writes.
 
 Render the party into every harness's native agent settings.
@@ -277,7 +278,7 @@ PI_TOOLS = {"Read": ["read"], "Grep": ["grep"], "Glob": ["find", "ls"], "Bash": 
 OPENCODE_PERMS = {"Read": ["read"], "Grep": ["grep"], "Glob": ["glob", "list"], "Bash": ["bash"],
                   "Edit": ["edit"], "Write": ["edit"]}
 ALL_OPENCODE_PERMS = ("read", "grep", "glob", "list", "bash", "edit", "webfetch", "subtask")
-VARIANT_PROVIDERS = {"openrouter"}  # providers whose models take a reasoning variant in opencode.json
+VARIANT_PROVIDERS = {"openrouter", "litellm"}  # providers whose models take a reasoning variant in opencode.json
 
 
 @dataclass
@@ -533,7 +534,7 @@ def party_opencode(schema: dict, party: Party, leader: bool) -> Rendered:
         models: dict = {}
         for r in party.roles:
             if r.squashed_into is None:
-                models.setdefault(r.model, {"name": r.model, "variants": {}})["variants"][f"party_{r.effort}"] = \
+                models.setdefault(r.model, ({"variants": {}} if party.provider == "litellm" else {"name": r.model, "variants": {}}))["variants"][f"party_{r.effort}"] = \
                     _opencode_variant(r.model, r.effort_value)
         arts.append(Artifact(config, json.dumps({"provider": {party.provider: {"models": models}}}), "jsonmerge",
                              owned_prefix="party_"))

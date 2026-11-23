@@ -13,10 +13,11 @@ Pipeline:
 |---|---|---|---|
 | LOAD | Read harness.json as the canonical server registry | [mandatory] | R1 |
 | LOAD_RULES | Render VS Code instruction text from the ordered rule registry when present | [mandatory] | Requirement #4 |
-| PROJECT | Render registered servers and the canonical SDD plugin in native client locations | [mandatory] | R1, R2, R7, R16, R33, R35 |
+| PROJECT | Render registered servers, canonical SDD plugin, and Hermes party model defaults in native client locations | [mandatory] | R1, R2, R7, R16, R33, R35, R45-R48 |
 | ROUTE | Start Headroom and route Codex and OpenCode model traffic through configured upstreams | [opt] | R27, R28, R32 |
 | FILTER | Project per-agent OpenCode tool patterns and MCP permissions | [opt] | R29, R36-R37 |
 | CAVEMAN | Project the pinned native plugin, mode skills, commands, and marked rules block | [opt] | R30 |
+| RULE_PLUGIN | Project an opt-in OpenCode or Claude Code rules plugin from the same scoped rule source | [opt] | R38-R44, REQ #24-25 |
 | CLEAN | Remove only the exact retired C: Graphify hook commands before projecting current hooks | [mandatory] | R8 |
 | WRITE | Merge through harness_write so backups and atomic writes apply | [mandatory] | R3 |
 | VERIFY | Native clients load their registered servers and unmanaged entries survive | [contract] | R4 |
@@ -70,6 +71,17 @@ R34: When an Oracle summary request runs, the system shall use the `opencode_con
 R35: When OpenCode sync applies, the system shall register the projected SDD plugin exactly once and preserve unrelated plugin entries.
 R36: When OpenCode agent permissions are configured, the system shall merge the configured entries into only the named agent's permission map.
 R37: If an OpenCode agent permission projection matches the target config, then the system shall skip the write.
+R38: WHEN `--target instructions --plugin` previews an OpenCode rule plugin, the adapter MUST not write files, SQLite, or client configuration.
+R39: WHEN `--target instructions --plugin --apply` selects OpenCode, the adapter MUST publish a separately owned plugin artifact and enable only that artifact in OpenCode configuration.
+R40: WHEN a rule plugin is applied, the adapter MUST preserve base instruction destinations and unrelated client configuration.
+R41: IF plugin mode selects a client without a verified native plugin activation route, THEN the adapter MUST report unsupported and perform no base export.
+R42: WHEN an OpenCode plugin artifact is applied, the adapter MUST verify its exact readback and its enabled registration.
+R43: WHEN Claude Code plugin mode is selected, the generated UserPromptSubmit hooks MUST emit only the scoped and ordered selected rule bodies in decoded chunks of at most 8,000 characters. [REQ #24]
+R44: WHEN a Claude Code plugin apply succeeds, the adapter MUST install at user scope and verify an enabled native plugin listing while preserving base instruction destinations. [REQ #25]
+R45: WHEN Hermes model projection applies, the adapter MUST derive role models from the canonical `tiers.toml` binding and configure the Leader as the session default and the Fighter as the generic delegated model.
+R46: WHEN Hermes model projection applies, the adapter MUST expose selectable `leader`, `fighter`, `scout`, and `oracle` aliases through the configured LiteLLM endpoint.
+R47: WHEN Hermes model projection is unchanged, the adapter MUST perform no native configuration save or snapshot.
+R48: WHEN Hermes model projection changes configuration, the adapter MUST use Hermes' native save API, verify its native snapshot, and preserve every unowned setting and credential.
 SUPERSEDED R34: Oracle summaries used the `opencode_context_proxy.upstream_url`; removed because the Leader summary hook blocked the native task before Oracle started. The OpenCode role request already uses its configured Headroom provider route.
 Preconditions: the registry is valid JSON and harness_write.py is available beside this file.
 Failure modes: malformed config or unsafe writes raise; target-specific parse failures do not overwrite.
@@ -95,6 +107,7 @@ import yaml
 
 import harness_write
 from instructions.rules import RuleStore
+from party import PartyError, resolve_party
 from scripts.validate_skills import validate_skill
 
 try:
@@ -124,6 +137,8 @@ OPENCODE_CAVEMAN_PLUGIN = "./plugins/caveman"
 OPENCODE_SDD_PLUGIN_SOURCE = Path(__file__).parent / "plugin" / ".opencode" / "plugins"
 OPENCODE_SDD_PLUGIN_FILE = "sdd-harness.js"
 OPENCODE_SDD_HELPER_FILE = "oracle-context.py"
+OPENCODE_RULE_PLUGIN_FILE = "harness-rules.js"
+CLAUDE_RULE_PLUGIN_NAME = "harness-rules"
 OPENCODE_CAVEMAN_RULE_BEGIN = "<!-- caveman-begin -->"
 OPENCODE_CAVEMAN_RULE_END = "<!-- caveman-end -->"
 HERMES_BRIDGE = Path(__file__).resolve().parent / "scripts" / "hermes_mcp.py"
@@ -147,17 +162,25 @@ def load_harness() -> dict:
 
 
 def hermes_command() -> list[str]:
-    """Resolve the installed Hermes interpreter and native projection bridge.
+    """Resolve Hermes' installed virtualenv interpreter and native projection bridge.
 
-    Require: Hermes is installed in a virtual environment on PATH.
+    Require: Hermes is installed on PATH and exposes its source virtual environment.
     Guarantee: Returns argument-list execution without shell interpolation.
     Maintain: Only Hermes' environment imports its optional native dependencies.
-    Assert: Missing interpreter or bridge fails before config access.
+    Assert: Sibling or HERMES_HOME-managed interpreter is selected before config access.
     """
     hermes = shutil.which("hermes")
     if not hermes:
         raise FileNotFoundError("Hermes executable was not found on PATH")
     python = Path(hermes).with_name("python.exe" if os.name == "nt" else "python")
+    if not python.is_file():
+        executable_home = Path(hermes).parent.parent
+        configured_home = Path(os.environ["HERMES_HOME"]) if os.environ.get("HERMES_HOME") else executable_home
+        candidates = (
+            executable_home / "hermes-agent" / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"),
+            configured_home / "hermes-agent" / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"),
+        )
+        python = next((candidate for candidate in candidates if candidate.is_file()), python)
     if not python.is_file() or not HERMES_BRIDGE.is_file():
         raise FileNotFoundError("Hermes interpreter or native harness bridge is missing")
     return [str(python), str(HERMES_BRIDGE)]
@@ -727,14 +750,53 @@ def sync_pi(config: dict) -> None:
     print("  pi: retained the existing retrieve-skills extension (no MCP config written)")
 
 
+def hermes_party_projection() -> dict:
+    """Resolve Hermes defaults from the canonical party model binding.
+
+    Returns:
+        Provider endpoint, provider name, and role-keyed LiteLLM model aliases.
+
+    Require: tiers.toml declares the Hermes model provider and complete role binding.
+    Guarantee: Leader, Fighter, Scout, and Oracle IDs come from party.py resolution.
+    Maintain: This projection adds no second model registry or credential source.
+    Assert: Every role resolves to a non-empty model and the endpoint is an HTTP URL.
+    Failure modes: Missing role bindings or an invalid endpoint raise before Hermes is changed.
+    """
+    import render_agents
+
+    schema = render_agents.load_schema()
+    provider = schema.get("harness", {}).get("hermes", {}).get("model_provider")
+    if not provider:
+        raise ValueError("tiers.toml must declare harness.hermes.model_provider")
+    binding = schema.get("binding", {}).get(provider)
+    if not isinstance(binding, dict):
+        raise ValueError(f"Hermes model provider {provider!r} has no canonical binding")
+    base_url = binding.get("base_url")
+    parsed = urlsplit(base_url or "")
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"Hermes model provider {provider!r} has no valid base_url")
+    try:
+        party = resolve_party(schema, "hermes", provider)
+    except PartyError as exc:
+        raise ValueError(f"Hermes party binding is invalid: {exc}") from exc
+    role_keys = {"leader": "leader", "fighter": "doer", "scout": "reader", "oracle": "oracle"}
+    roles = {role: next((item for item in party.roles if item.role == key), None)
+             for role, key in role_keys.items()}
+    if any(item is None or not item.model for item in roles.values()):
+        raise ValueError("Hermes party binding must resolve Leader, Fighter, Scout, and Oracle models")
+    return {"provider": provider, "base_url": base_url,
+            "models": {role: item.model for role, item in roles.items()}}
+
+
 def sync_hermes(config: dict) -> None:
     """Project registry servers through Hermes' native MCP config writer.
 
-    Require: `hermes` is installed in a virtual environment with its sibling Python executable.
+    Require: `hermes` and its installed virtual environment are available on the current user profile.
     Guarantee: managed entries match harness.json and Hermes preserves unrelated config values.
     Maintain: Hermes owns serialization and validation; harness_write never opens credential files.
     Assert: every registry entry is accepted by Hermes or the subprocess fails visibly.
     """
+    party = hermes_party_projection()
     servers = {}
     for name, server in config["mcp_servers"].items():
         entry = {"enabled": True}
@@ -762,6 +824,21 @@ def sync_hermes(config: dict) -> None:
         raise RuntimeError("Hermes projection summary omitted registry entries")
     print(f"  Hermes: configured {len(servers)} servers; changed {len(summary['changed'])}; "
           f"snapshot {'verified' if summary.get('snapshot') else 'not required'}")
+    party_result = subprocess.run(
+        [*hermes_command(), "--party"],
+        input=json.dumps(party),
+        text=True,
+        capture_output=True,
+        check=True,
+        env=os.environ.copy(),
+        timeout=60,
+    )
+    party_summary = json.loads(party_result.stdout)
+    if set(party_summary.get("aliases", [])) != {"leader", "fighter", "scout", "oracle"}:
+        raise RuntimeError("Hermes party projection readback omitted a role alias")
+    print(f"  Hermes: default={party_summary['default_model']}; delegated={party_summary['delegation_model']}; "
+          f"aliases={len(party_summary['aliases'])}; changed={party_summary['changed']}; "
+          f"snapshot {'verified' if party_summary.get('snapshot') else 'not required'}")
 
 
 MCP_TOML_BEGIN = "# >>> harness mcp servers (generated by ~/.harness; edit harness.json, not this block) >>>"
@@ -1318,6 +1395,243 @@ def _instruction_targets() -> dict[str, Path]:
     }
 
 
+def _instruction_plugin_targets() -> dict[str, tuple[Path, Path]]:
+    """Return verified native plugin and registration paths for rule overlays.
+
+    Require: the client has a reviewed plugin loader that can inject a system prompt.
+    Guarantee: each returned route has a dedicated owned artifact and configuration file.
+    Maintain: base instruction destinations are never present in this mapping.
+    Assert: OpenCode's global plugin directory is loaded only when its plugin entry is enabled.
+    Failure modes: callers report clients absent from this mapping as unsupported.
+    """
+    opencode_dir = Path.home() / ".config" / "opencode"
+    return {"opencode": (opencode_dir / "plugins" / OPENCODE_RULE_PLUGIN_FILE,
+                            opencode_dir / "opencode.json")}
+
+
+def _claude_rule_plugin_root() -> Path:
+    """Return the stable local-marketplace package root for Claude Code rules."""
+    return Path.home() / ".harness" / "plugin-export" / "claude" / "plugins" / CLAUDE_RULE_PLUGIN_NAME
+
+
+def _render_opencode_rule_plugin(fragments: list[dict]) -> bytes:
+    """Render an OpenCode v1-compatible system-prompt plugin from scoped rules.
+
+    Require: fragments have passed source audience and order validation.
+    Guarantee: output exports one named plugin whose system hook appends exact rule text.
+    Maintain: the plugin has no tools, MCP servers, or filesystem behavior.
+    Assert: the generated marker occurs in the payload used by the hook.
+    Failure modes: invalid fragment body encoding propagates from the source reader.
+    """
+    body = "\n".join(item["body"].rstrip("\r\n") for item in fragments).rstrip() + "\n"
+    text = (
+        "// HARNESS_RULES_PLUGIN_START\n"
+        "const rules = " + json.dumps(body, ensure_ascii=False) + ";\n\n"
+        "const HarnessRules = async () => ({\n"
+        "  name: 'harness-rules',\n"
+        "  'experimental.chat.system.transform': async (_input, output) => {\n"
+        "    if (Array.isArray(output.system)) output.system.push(rules);\n"
+        "  },\n"
+        "});\n\n"
+        "module.exports = { id: 'harness-rules', server: HarnessRules };\n"
+        "// HARNESS_RULES_PLUGIN_END\n"
+    )
+    return text.encode("utf-8")
+
+
+def _render_claude_rule_plugin(fragments: list[dict]) -> dict[Path, bytes]:
+    """Render a self-contained Claude Code plugin whose hook supplies selected rules.
+
+    Require: fragments have passed explicit audience and ordering validation.
+    Guarantee: ordered hooks emit only the selected rule bodies in decoded chunks of at most 8,000 characters.
+    Maintain: the package has no MCP server, tool permission, or base-instruction mutation.
+    Assert: manifest, hook declaration, and Python hook use the same plugin root layout.
+    Failure modes: invalid fragment body encoding propagates from the source reader.
+    """
+    body = "\n".join(item["body"].rstrip("\r\n") for item in fragments).rstrip() + "\n"
+    chunks = [body[index:index + 8000] for index in range(0, len(body), 8000)] or [""]
+    hook_entries = []
+    scripts: dict[Path, bytes] = {}
+    for index, chunk in enumerate(chunks):
+        name = "rules.py" if index == 0 else f"rules-{index:03d}.py"
+        hook_entries.append({"hooks": [{
+            "type": "command", "command": f"python \"${{CLAUDE_PLUGIN_ROOT}}/hooks/{name}\"",
+        }]})
+        script = (
+            "import json\nimport sys\n\n"
+            f"RULES = {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            "json.dump({'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit', "
+            "'additionalContext': RULES}}, sys.stdout)\n"
+        )
+        scripts[Path("hooks") / name] = script.encode("utf-8")
+    package_digest = hashlib.sha256(body.encode("utf-8") + b"\0" + b"".join(
+        content for _, content in sorted(scripts.items(), key=lambda item: item[0].as_posix())
+    )).hexdigest()
+    plugin_version = f"0.1.{int(package_digest[:6], 16)}"
+    manifest = {
+        "name": CLAUDE_RULE_PLUGIN_NAME,
+        "version": plugin_version,
+        "description": "Scoped harness rules injected at user prompts.",
+        "hooks": "./hooks/hooks.json",
+    }
+    hooks = {"hooks": {"UserPromptSubmit": hook_entries}}
+    marketplace = {
+        "name": "harness-rules-local",
+        "owner": {"name": "harness"},
+        "plugins": [{
+            "name": CLAUDE_RULE_PLUGIN_NAME,
+            "source": f"./plugins/{CLAUDE_RULE_PLUGIN_NAME}",
+            "description": manifest["description"],
+            "version": plugin_version,
+        }],
+    }
+    return {
+        Path(".claude-plugin/plugin.json"): (json.dumps(manifest, indent=2) + "\n").encode("utf-8"),
+        Path("hooks/hooks.json"): (json.dumps(hooks, indent=2) + "\n").encode("utf-8"),
+        **scripts,
+        Path("../../.claude-plugin/marketplace.json"): (json.dumps(marketplace, indent=2) + "\n").encode("utf-8"),
+    }
+
+
+def _claude_plugin_entry(output: str) -> dict | None:
+    """Return the installed user-scope rules plugin entry from Claude's inventory."""
+    try:
+        entries = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Claude Code plugin list returned invalid JSON") from exc
+    if not isinstance(entries, list):
+        raise RuntimeError("Claude Code plugin list returned a non-list JSON value")
+    return next((entry for entry in entries
+                 if isinstance(entry, dict)
+                 and entry.get("id") == f"{CLAUDE_RULE_PLUGIN_NAME}@harness-rules-local"
+                 and entry.get("scope") == "user"), None)
+
+
+def _run_claude_plugin(args: list[str]) -> subprocess.CompletedProcess:
+    """Run one noninteractive Claude Code plugin command and surface native failure."""
+    command = [shutil.which("claude") or "claude", "plugin", *args]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise RuntimeError(f"Claude Code plugin command failed: {' '.join(command)}\n{result.stderr.strip()}")
+    return result
+
+
+def _apply_claude_rule_plugin(fragments: list[dict], *, apply: bool, database: Path) -> bool:
+    """Preview or publish and activate the native Claude Code rules plugin.
+
+    Require: the caller selected Claude Code plugin mode and the rule registry exists on apply.
+    Guarantee: package preview is read-only; apply maps and publishes only the package hook then uses native CLI activation.
+    Maintain: base instruction destinations and unrelated Claude settings stay outside this adapter's write set.
+    Assert: native validation and enabled user-scope listing succeed after activation.
+    Failure modes: occupied unmanaged package files, registry drift, and CLI errors stop before completion.
+    """
+    root = _claude_rule_plugin_root()
+    rendered = _render_claude_rule_plugin(fragments)
+    hook_path = root / "hooks" / "rules.py"
+    marketplace_path = root.parent.parent / ".claude-plugin" / "marketplace.json"
+    document_id = "export-claude-plugin"
+    current = hook_path.read_bytes() if hook_path.is_file() else b""
+    mapping = document = None
+    if database.is_file():
+        with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
+            db.row_factory = sqlite3.Row
+            document = db.execute("SELECT revision,render_sha256 FROM documents WHERE document_id=?", (document_id,)).fetchone()
+            mapping = db.execute("SELECT expected_sha256 FROM targets WHERE document_id=? AND target_path=?",
+                                 (document_id, str(hook_path.resolve()))).fetchone()
+    package_conflicts = [path for relative in rendered if relative != Path("hooks/rules.py")
+                         if (root / relative).is_file() and (root / relative).read_bytes() != rendered[relative]]
+    if mapping is None and current:
+        print(f"  claude: unmanaged plugin hook preserved target={hook_path}")
+        return False
+    current_digest = hashlib.sha256(current).hexdigest()
+    if mapping is not None and mapping["expected_sha256"] != current_digest:
+        print(f"  claude: drift_refused expected={mapping['expected_sha256']} current={current_digest}")
+        return False
+    if package_conflicts:
+        print(f"  claude: unmanaged plugin package content preserved target={package_conflicts[0]}")
+        return False
+    if not fragments and mapping is None and not current:
+        print("  claude: no scoped rules; plugin destination untouched")
+        return True
+    planned = rendered[Path("hooks/rules.py")]
+    print(f"  claude: {'pending' if apply else 'would_write'} plugin={root} hook_current={hashlib.sha256(current).hexdigest()} hook_planned={hashlib.sha256(planned).hexdigest()}")
+    if not apply:
+        print(f"  claude: activation would run plugin install --scope user from {marketplace_path.parent}")
+        return True
+    store = _existing_instruction_store(database)
+    export_path = INSTRUCTION_EXPORT_DIR / f"{document_id}.py"
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_bytes(planned)
+    if document is None or document["render_sha256"] != hashlib.sha256(planned).hexdigest():
+        store.import_markdown(document_id, export_path)
+    if mapping is None:
+        store.transfer_target(document_id, hook_path, current_digest)
+    store.publish(document_id, hook_path, None, BACKUP_RUN, dry_run=False)
+    for relative, content in rendered.items():
+        if relative == Path("hooks/rules.py"):
+            continue
+        destination = root / relative
+        harness_write.write_bytes(destination, content, BACKUP_RUN)
+    _run_claude_plugin(["validate", str(root)])
+    listed = _run_claude_plugin(["list", "--json"])
+    entry = _claude_plugin_entry(listed.stdout)
+    plugin_id = f"{CLAUDE_RULE_PLUGIN_NAME}@harness-rules-local"
+    manifest = json.loads(rendered[Path(".claude-plugin/plugin.json")])
+    if entry is None:
+        _run_claude_plugin(["install", CLAUDE_RULE_PLUGIN_NAME, "--marketplace", str(marketplace_path.parent.parent),
+                            "--scope", "user", "--yes", "--json"])
+    elif entry.get("version") != manifest["version"]:
+        _run_claude_plugin(["marketplace", "update", "harness-rules-local"])
+        _run_claude_plugin(["update", plugin_id, "--scope", "user", "--yes", "--json"])
+    listed = _run_claude_plugin(["list", "--json"])
+    entry = _claude_plugin_entry(listed.stdout)
+    if entry is None:
+        raise RuntimeError("Claude Code plugin activation readback did not list the user plugin")
+    if entry.get("version") != manifest["version"]:
+        raise RuntimeError("Claude Code plugin activation readback returned a stale plugin version")
+    if entry.get("enabled") is not True:
+        _run_claude_plugin(["enable", plugin_id, "--scope", "user"])
+        listed = _run_claude_plugin(["list", "--json"])
+        entry = _claude_plugin_entry(listed.stdout)
+    if entry is None or entry.get("enabled") is not True:
+        raise RuntimeError("Claude Code plugin activation readback did not show an enabled user plugin")
+    print("  claude: plugin validated, installed at the selected version, and enabled; reload Claude Code")
+    return True
+
+
+def _opencode_rule_plugin_registration(config_path: Path, plugin_path: Path, *, apply: bool) -> bool:
+    """Enable one adapter-owned OpenCode plugin while preserving other settings.
+
+    Require: plugin_path is the exact generated rules plugin and config_path is OpenCode's global config.
+    Guarantee: only the legacy `plugin` registration array gains the selected absolute plugin path.
+    Maintain: all non-plugin keys and existing plugin entries remain unchanged.
+    Assert: apply readback contains the selected path exactly once.
+    Failure modes: malformed config or a non-array plugin setting raises before writes.
+    """
+    current = harness_write.read_existing(config_path)
+    data = harness_write.load_jsonc(current) if current else {}
+    if not isinstance(data, dict):
+        raise harness_write.WriteError(f"{config_path}: expected a JSON object")
+    plugins = data.get("plugin", [])
+    if not isinstance(plugins, list) or any(not isinstance(item, str) for item in plugins):
+        raise harness_write.WriteError(f"{config_path}: expected a string array at 'plugin'")
+    selected = str(plugin_path)
+    merged = [item for item in plugins if item != selected] + [selected]
+    artifact = harness_write.Artifact(config_path, json.dumps({"plugin": merged}, indent=2) + "\n", "jsonmerge",
+                                      owned_prefix="")
+    changes = harness_write.plan([artifact])
+    status = changes[0].status
+    print(f"  opencode: plugin registration {status.lower()} target={config_path}")
+    if not apply:
+        return status != "IDENTICAL"
+    harness_write.apply(changes, BACKUP_RUN)
+    readback = harness_write.load_jsonc(harness_write.read_existing(config_path) or "{}")
+    registered = readback.get("plugin", [])
+    if not isinstance(registered, list) or registered.count(selected) != 1:
+        raise RuntimeError("OpenCode plugin registration readback mismatch")
+    return status != "IDENTICAL"
+
+
 def _render_instruction_view(client: str, fragments: list[dict]) -> bytes:
     """Render the selected Markdown bodies in the destination client's native format.
 
@@ -1490,7 +1804,7 @@ def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
     Failure modes: malformed metadata, source drift, target drift, and unknown client names fail visibly.
     """
     targets = _instruction_targets()
-    selected = clients or list(targets)
+    selected = clients or ["claude", *targets]
     unknown_clients = sorted(set(selected) - KNOWN_INSTRUCTION_CLIENTS)
     unsupported_clients = sorted(set(selected) & (KNOWN_INSTRUCTION_CLIENTS - set(targets)))
     store = _existing_instruction_store(database) if (apply or map_baseline) else None
@@ -1576,6 +1890,85 @@ def sync_instructions(*, clients: list[str] | None = None, apply: bool = False,
     return 1 if failures else 0
 
 
+def sync_instruction_plugins(*, clients: list[str] | None = None, apply: bool = False,
+                             source_dir: Path = RULES_SOURCE_DIR,
+                             database: Path = HARNESS_RULES_DB) -> int:
+    """Preview or activate target-native optional rule plugins.
+
+    Require: selected clients are explicit and source fragments have explicit audience and order.
+    Guarantee: preview is read-only; apply publishes only plugin destinations and activation settings.
+    Maintain: base instruction targets and unrelated OpenCode settings remain byte-preserved.
+    Assert: each plugin package has its own RuleStore document and mapped destination.
+    Failure modes: unsupported clients, unmanaged occupied plugin destinations, and drift fail visibly.
+    """
+    targets = _instruction_plugin_targets()
+    selected = clients or ["claude", *targets]
+    fragments, excluded = _instruction_fragments(source_dir)
+    print(f"Instruction plugin source: {source_dir} ({len(fragments)} eligible, {len(excluded)} excluded)")
+    for filename, disposition in excluded:
+        print(f"  {disposition}: {filename}")
+    failures = False
+    for client in selected:
+        if client == "claude":
+            selected_fragments = [item for item in fragments if client in item["audience"]]
+            if not _apply_claude_rule_plugin(selected_fragments, apply=apply, database=database):
+                failures = True
+            continue
+        if client not in targets:
+            print(f"  unsupported: {client} (no verified native plugin route); no base export attempted")
+            failures = True
+            continue
+        plugin_path, config_path = targets[client]
+        selected_fragments = [item for item in fragments if client in item["audience"]]
+        payload = _render_opencode_rule_plugin(selected_fragments)
+        document_id = f"export-{client}-plugin"
+        current = plugin_path.read_bytes() if plugin_path.is_file() else b""
+        current_digest = hashlib.sha256(current).hexdigest()
+        planned_digest = hashlib.sha256(payload).hexdigest()
+        mapping = document = None
+        if database.is_file():
+            with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
+                db.row_factory = sqlite3.Row
+                document = db.execute("SELECT revision,render_sha256 FROM documents WHERE document_id=?", (document_id,)).fetchone()
+                mapping = db.execute("SELECT expected_sha256 FROM targets WHERE document_id=? AND target_path=?",
+                                     (document_id, str(plugin_path.resolve()))).fetchone()
+        if mapping is None and current:
+            print(f"  {client}: unmanaged plugin destination preserved target={plugin_path}")
+            failures = True
+            continue
+        if not selected_fragments and mapping is None:
+            print(f"  {client}: no scoped rules; plugin destination untouched")
+            continue
+        disposition = "unchanged" if mapping and current == payload else ("would_write" if not apply else "pending")
+        print(f"  {client}: {disposition} plugin={plugin_path} baseline={mapping['expected_sha256'] if mapping else 'new-empty'} current={current_digest} planned={planned_digest}")
+        for item in selected_fragments:
+            print(f"    source={item['name']} sha256={item['digest']}")
+        if not apply:
+            _opencode_rule_plugin_registration(config_path, plugin_path, apply=False)
+            continue
+        if mapping is not None and mapping["expected_sha256"] != current_digest:
+            print(f"  {client}: drift_refused expected={mapping['expected_sha256']} current={current_digest}")
+            failures = True
+            continue
+        # Parse and plan the activation config before publishing the plugin, so a malformed
+        # setting cannot leave a valid package that the selected OpenCode instance cannot load.
+        _opencode_rule_plugin_registration(config_path, plugin_path, apply=False)
+        store = _existing_instruction_store(database)
+        export_path = INSTRUCTION_EXPORT_DIR / f"{document_id}.js"
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        export_path.write_bytes(payload)
+        if document is None or document["render_sha256"] != planned_digest:
+            store.import_markdown(document_id, export_path)
+        if mapping is None:
+            store.transfer_target(document_id, plugin_path, current_digest)
+        status = store.publish(document_id, plugin_path, None, BACKUP_RUN, dry_run=False)
+        if plugin_path.read_bytes() != payload:
+            raise RuntimeError(f"{client}: plugin readback mismatch")
+        _opencode_rule_plugin_registration(config_path, plugin_path, apply=True)
+        print(f"  {client}: plugin {status.lower()} and enabled")
+    return 1 if failures else 0
+
+
 TARGETS = {
     "claude": sync_claude_code,
     "opencode": sync_opencode,
@@ -1594,6 +1987,7 @@ def main():
     parser.add_argument("--target", choices=[*TARGETS, *OPT_IN_TARGETS, "all"], default="all")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="apply the selected target's planned changes")
+    parser.add_argument("--plugin", action="store_true", help="instructions: select target-native optional plugin export")
     parser.add_argument("--map-baseline", action="store_true", help="instructions: register selected target baselines without publishing")
     mode.add_argument('--check', action='store_true', help='skills: report drift without writing')
     parser.add_argument('--skill', nargs='+', help='selected canonical skill packages')
@@ -1603,14 +1997,20 @@ def main():
     args = parser.parse_args()
     if args.target == 'skills' and args.client and not set(args.client) <= skill_clients:
         parser.error('--target skills accepts only native skill projection clients')
-    if args.target not in ('skills', 'instructions') and (args.skill or args.check or args.reconcile or args.client or args.map_baseline):
+    if args.target not in ('skills', 'instructions') and (args.skill or args.check or args.reconcile or args.client or args.map_baseline or args.plugin):
         parser.error('--skill/--check/--reconcile belong to skills; --client/--map-baseline require instructions or skills')
     if args.target == 'instructions' and (args.skill or args.check or args.reconcile):
         parser.error('--skill, --check and --reconcile belong to --target skills')
     if args.map_baseline and args.apply:
         parser.error('--map-baseline and --apply are separate operations')
+    if args.plugin and args.target != 'instructions':
+        parser.error('--plugin requires --target instructions')
+    if args.plugin and args.map_baseline:
+        parser.error('--plugin does not use --map-baseline; plugin artifacts map only empty managed destinations on --apply')
 
     if args.target == 'instructions':
+        if args.plugin:
+            raise SystemExit(sync_instruction_plugins(clients=args.client, apply=args.apply))
         if not args.client and not args.apply and not args.map_baseline:
             print("Previewing supported instruction routes only; use --client to select a subset.")
         raise SystemExit(sync_instructions(clients=args.client, apply=args.apply, map_baseline=args.map_baseline))

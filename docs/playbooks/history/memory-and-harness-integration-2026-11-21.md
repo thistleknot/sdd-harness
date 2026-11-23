@@ -1,5 +1,15 @@
 # Superseded context export and remote sync states — 2026-11-21
 
+## Superseded Claude-only remote sync interpretation
+
+The earlier decision extended `sync-to-remote.ps1` to include `.rules/`,
+`.skills/GLOSSARY.md`, `plan-do`, `task-breakdown`, `.harness/constitution.md`,
+`.harness/rules/`, and plan-router hook files while leaving `.claude/settings.json`
+out because it held Windows paths. That decision was based on remote Claude
+missing the plan-do skill and router hook, and on avoiding the 5.3 GB full skill
+library. It is superseded by the selected multi-harness contract in R22 and
+R43-R46.
+
 ## Superseded local context-export preview state — 2026-11-21
 
 The initial preview confirmed `055-context-assembly.md` in all seven declared
